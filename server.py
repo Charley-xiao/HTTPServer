@@ -7,8 +7,28 @@ import os
 import hashlib
 import datetime
 import mimetypes
+import sqlite3
 
 session_storage = {}
+DATABASE_FILE = 'users.db'
+
+def initialize_database():
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            email TEXT NOT NULL
+        )
+    ''')
+
+    cursor.execute('INSERT OR REPLACE INTO users (username, password, email) VALUES (?, ?, ?)', ('admin', 'admin','admin@mail.sustech.edu.cn'))
+    cursor.execute('INSERT OR REPLACE INTO users (username, password, email) VALUES (?, ?, ?)', ('client1', 'password1','client1@google.com'))
+
+    conn.commit()
+    conn.close()
 
 def generate_session_id(username):
     timestamp = str(datetime.datetime.now())
@@ -34,11 +54,12 @@ def get_username_from_cookie(cookie):
     return session_storage.get(session_id, None)
 
 def check_authorization(username, password):
-    # TODO: change authorization logic
-    if username == 'admin' and password == 'admin':
-        return True
-    else:
-        return False
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM users WHERE username=? AND password=?', (username, password))
+    user = cursor.fetchone()
+    conn.close()
+    return user is not None
     
 def get_content_type(file_path):
     mime, encoding = mimetypes.guess_type(file_path)
@@ -111,6 +132,45 @@ def parse_url(raw_path):
 
     return path, query_params
 
+def handle_registration(client_socket, request_lines):
+    content_length = None
+    for line in request_lines:
+        if 'Content-Length' in line:
+            content_length = int(line.split(': ')[1])
+            break
+    print(f'Content length: {content_length}')
+    # request_body = client_socket.recv(content_length).decode('utf-8')
+    username, password, email = request_lines[-1].split('&')
+    username = username.split('=')[1]
+    password = password.split('=')[1]
+    email = email.split('=')[1]
+    print(f'Username: {username}\nPassword: {password}\nEmail: {email}')
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM users WHERE username=?', (username,))
+    user = cursor.fetchone()
+    if user is None:
+        cursor.execute('INSERT INTO users (username, password, email) VALUES (?, ?, ?)', (username, password, email))
+        conn.commit()
+        conn.close()
+        with open('login.html', 'r') as file:
+            login_page = file.read()
+            login_page = login_page.replace('<input type="submit" value="Login">', '<p style="color:green">Registration successful</p><input type="submit" value="Login">')
+            response_data = 'HTTP/1.1 200 OK\r\n\r\n' + login_page
+        client_socket.sendall(response_data.encode('utf-8'))
+        # if connection_header and connection_header == 'close':
+        client_socket.close()
+        return
+    else:
+        conn.close()
+        with open('register.html', 'r') as file:
+            register_page = file.read()
+            register_page = register_page.replace('<input type="submit" value="Register">', '<p style="color:red">Username already taken</p><input type="submit" value="Register">')
+            response_data = 'HTTP/1.1 200 OK\r\n\r\n' + register_page
+        client_socket.sendall(response_data.encode('utf-8'))
+        # if connection_header and connection_header == 'close':
+        client_socket.close()
+        return
 
 def handle_request(client_socket):
     request_data = client_socket.recv(1024).decode('utf-8')
@@ -277,6 +337,17 @@ def handle_request(client_socket):
             client_socket.sendall(response_data.encode('utf-8'))
             client_socket.close()
             return
+    elif raw_path == '/register' and method == 'GET':
+        with open('register.html', 'r') as file:
+            register_page = file.read()
+            response_data = 'HTTP/1.1 200 OK\r\n\r\n' + register_page
+        client_socket.sendall(response_data.encode('utf-8'))
+        # if connection_header and connection_header == 'close':
+        client_socket.close()
+        return
+    elif raw_path == '/register' and method == 'POST':
+        handle_registration(client_socket, request_lines)
+        return
     elif raw_path.startswith('/logout') and method == 'GET':
         with open('login.html', 'r') as file:
             login_page = file.read()
@@ -334,6 +405,7 @@ def main():
     parser.add_argument('-w', '--workers', type=int, default=4, help='Number of worker threads')
     args = parser.parse_args()
 
+    initialize_database()
     run_server(args.host, args.port, args.workers)
 
 if __name__ == '__main__':
