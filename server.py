@@ -240,7 +240,14 @@ def handle_request(client_socket):
             response_data = f'HTTP/1.1 302 Found\r\nLocation: /index\r\n\r\n'
         else:
             print('Unauthorized')
-            response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nInvalid username or password'
+            with open('login.html', 'r') as file:
+                login_page = file.read()
+                login_page = login_page.replace('<input type="submit" value="Login">', '<p style="color:red">Invalid username or password</p><input type="submit" value="Login">')
+                response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\n' + login_page
+            client_socket.sendall(response_data.encode('utf-8'))
+            # if connection_header and connection_header == 'close':
+            client_socket.close()
+            return
     elif raw_path == '/index' and method == 'GET':
         # Return the secure page
         with open('index.html', 'r') as file:
