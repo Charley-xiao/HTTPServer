@@ -4,6 +4,26 @@ from threading import Thread
 from queue import Queue
 import base64
 import os
+import hashlib
+import datetime
+import mimetypes
+
+session_storage = {}
+
+def generate_session_id(username):
+    timestamp = str(datetime.datetime.now())
+    data = f"{username}{timestamp}"
+    session_id = hashlib.sha256(data.encode('utf-8')).hexdigest()
+    return session_id
+
+def set_cookie_header(username):
+    session_id = generate_session_id(username)
+    session_storage[session_id] = username 
+    return f'Set-Cookie: session-id={session_id}; Path=/; HttpOnly\r\n'
+
+def get_username_from_cookie(cookie):
+    session_id = cookie.split('=')[1]
+    return session_storage.get(session_id, None)
 
 def check_authorization(username, password):
     # TODO: change authorization logic
@@ -11,6 +31,52 @@ def check_authorization(username, password):
         return True
     else:
         return False
+    
+def get_content_type(file_path):
+    mime, encoding = mimetypes.guess_type(file_path)
+    return mime if mime else 'application/octet-stream'
+
+def handle_file_request(client_socket, path, auth_header):
+    # Check if the client is authorized
+    if not auth_header or not auth_header.startswith('Basic '):
+        response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nWWW-Authenticate: Basic realm="Authorization required"'
+        client_socket.sendall(response_data.encode('utf-8'))
+        return
+
+    encoded_credentials = auth_header[len('Basic '):]
+    decoded_credentials = base64.b64decode(encoded_credentials).decode('utf-8')
+    username, password = decoded_credentials.split(':')
+
+    if not check_authorization(username, password):
+        response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nInvalid username or password'
+        client_socket.sendall(response_data.encode('utf-8'))
+        return
+
+    file_path = f'./data{path}'
+
+    if os.path.exists(file_path):
+        if os.path.isfile(file_path):
+            # Handle file download
+            with open(file_path, 'rb') as file:
+                file_content = file.read()
+                content_length = len(file_content)
+                content_type = get_content_type(file_path)
+
+                response_data = f'HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {content_length}\r\n\r\n'
+                client_socket.sendall(response_data.encode('utf-8') + file_content)
+        elif os.path.isdir(file_path):
+            # Handle directory listing
+            files = os.listdir(file_path)
+            files_list = '\n'.join(files)
+
+            response_data = f'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {len(files_list)}\r\n\r\n{files_list}'
+            client_socket.sendall(response_data.encode('utf-8'))
+    else:
+        # Handle file not found
+        response_data = 'HTTP/1.1 404 Not Found\r\n\r\nFile not found'
+        client_socket.sendall(response_data.encode('utf-8'))
+    
+    client_socket.close()
 
 def worker(queue):
     while True:
@@ -33,6 +99,7 @@ def parse_url(raw_path):
         query_params = dict([p.split("=") for p in parts[1].split("&")])
 
     return path, query_params
+
 
 def handle_request(client_socket):
     request_data = client_socket.recv(1024).decode('utf-8')
@@ -68,6 +135,14 @@ def handle_request(client_socket):
             break
     print(f'Range header: {range_header}')
 
+    cookie_header = None
+    for line in request_lines:
+        if line.startswith('Cookie: '):
+            cookie_header = line[len('Cookie: '):].strip()
+            break
+    print(f'Cookie header: {cookie_header}')
+    username_from_cookie = get_username_from_cookie(cookie_header) if cookie_header else None
+
     if 'q' in query_params: # TODO: change the logic
         query_value = query_params['q'][0]
         print(f'Query parameter q: {query_value}')
@@ -80,6 +155,14 @@ def handle_request(client_socket):
         
         if check_authorization(username,password):
             print('Authorized')
+            if cookie_header and username_from_cookie:
+                print(f'User from cookie: {username_from_cookie}')
+                response_data = f'HTTP/1.1 200 OK\r\n{set_cookie_header(username_from_cookie)}\r\n\r\nHello, {username_from_cookie}!'
+            else:
+                # Set a new session ID in the cookie for the user
+                print('Setting new session ID in cookie')
+                response_data = f'HTTP/1.1 200 OK\r\n{set_cookie_header(username)}\r\n\r\nHello, {username}!'
+
             if range_header and method == 'GET': # TODO: support multirange requests
                 try:
                     range_start, range_end = map(int, range_header[len('bytes='):].split('-'))
@@ -107,7 +190,8 @@ def handle_request(client_socket):
                     
             if method == 'GET':
                 print('GET')
-                response_data = 'HTTP/1.1 200 OK\r\n\r\nHello, this is a simple HTTP server!'
+                handle_file_request(client_socket, raw_path, auth_header)
+                return
             elif method == 'POST':
                 content_length = int(request_lines[-1].split(': ')[-1])
                 request_body = client_socket.recv(content_length).decode('utf-8')
@@ -118,12 +202,16 @@ def handle_request(client_socket):
         else:
             print('Unauthorized')
             response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nInvalid username or password'
+    elif raw_path.startswith('/data'):
+        handle_file_request(client_socket, raw_path, auth_header)
+        return
     elif raw_path == '/login' and method == 'GET':
         # Return the login page
         with open('login.html', 'r') as file:
             login_page = file.read()
             response_data = 'HTTP/1.1 200 OK\r\n\r\n' + login_page
         client_socket.sendall(response_data.encode('utf-8'))
+        # if connection_header and connection_header == 'close':
         client_socket.close()
         return
     elif raw_path == '/login' and method == 'POST':
@@ -141,7 +229,15 @@ def handle_request(client_socket):
         print(f'Username: {username}\nPassword: {password}')
         if check_authorization(username,password):
             print('Authorized')
-            response_data = 'HTTP/1.1 302 Found\r\nLocation: /index\r\n\r\n'
+            if cookie_header and username_from_cookie:
+                print(f'User from cookie: {username_from_cookie}')
+                response_data = f'HTTP/1.1 200 OK\r\n{set_cookie_header(username_from_cookie)}\r\n\r\nHello, {username_from_cookie}!'
+            else:
+                # Set a new session ID in the cookie for the user
+                print('Setting new session ID in cookie')
+                response_data = f'HTTP/1.1 200 OK\r\n{set_cookie_header(username)}\r\n\r\nHello, {username}!'
+
+            response_data = f'HTTP/1.1 302 Found\r\nLocation: /index\r\n\r\n'
         else:
             print('Unauthorized')
             response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nInvalid username or password'
@@ -151,10 +247,11 @@ def handle_request(client_socket):
             index_page = file.read()
             response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
         client_socket.sendall(response_data.encode('utf-8'))
+        # if connection_header and connection_header == 'close':
         client_socket.close()
         return
     else:
-        response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nAuthorization header missing or invalid'
+        response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nWWW-Authenticate: Basic realm="Authorization required"'
 
     print(f'Response data: {response_data}')
     client_socket.sendall(response_data.encode('utf-8'))
