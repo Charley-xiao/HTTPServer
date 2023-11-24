@@ -1,6 +1,5 @@
 import socket
 import argparse
-from urllib.parse import urlparse, parse_qs
 from threading import Thread
 from queue import Queue
 import base64
@@ -20,6 +19,21 @@ def worker(queue):
             break  # Signal to exit the thread pool
         handle_request(client_socket)
 
+def parse_url(raw_path):
+    if "://" in raw_path:
+        raw_path = raw_path.split("://", 1)[1]
+
+    parts = raw_path.split("/", 1)
+    path = '/data' + '/' + parts[-1]
+    parts = path.split("?")
+    path = path.split("?")[0]
+
+    query_params = {}
+    if len(parts) > 1:
+        query_params = dict([p.split("=") for p in parts[1].split("&")])
+
+    return path, query_params
+
 def handle_request(client_socket):
     request_data = client_socket.recv(1024).decode('utf-8')
     if not request_data:
@@ -30,9 +44,7 @@ def handle_request(client_socket):
     method, raw_path, _ = request_lines[0].split()
     print(f'Request method: {method}\nRequest path: {raw_path}')
 
-    parsed_url = urlparse(raw_path)
-    path = '/data' + parsed_url.path
-    query_params = parse_qs(parsed_url.query)
+    path, query_params = parse_url(raw_path)
     print(f'Parsed path: {path}\nQuery parameters: {query_params}')
     
     auth_header = None
@@ -121,29 +133,29 @@ def run_server(host, port, num_workers):
     server_socket.listen(5)
     print(f'Server listening on {host}:{port}')
 
-    # worker_queue = Queue()
+    worker_queue = Queue()
 
-    # workers = [Thread(target=worker, args=(worker_queue,)) for _ in range(num_workers)]
-    # for worker_thread in workers:
-    #     worker_thread.start()
+    workers = [Thread(target=worker, args=(worker_queue,)) for _ in range(num_workers)]
+    for worker_thread in workers:
+        worker_thread.start()
 
-    # try:
-    #     while True:
-    #         client_socket, client_address = server_socket.accept()
-    #         print(f'Accepted connection from {client_address}')
-    #         worker_queue.put(client_socket)
-    # except KeyboardInterrupt:
-    #     for _ in range(num_workers):
-    #         worker_queue.put(None)
+    try:
+        while True:
+            client_socket, client_address = server_socket.accept()
+            print(f'Accepted connection from {client_address}')
+            worker_queue.put(client_socket)
+    except KeyboardInterrupt:
+        for _ in range(num_workers):
+            worker_queue.put(None)
 
-    #     for worker_thread in workers:
-    #         worker_thread.join()
+        for worker_thread in workers:
+            worker_thread.join()
 
-    while True:
-        client_socket, client_address = server_socket.accept()
-        print(f'Accepted connection from {client_address}')
-        client_handler = Thread(target=handle_request, args=(client_socket,))
-        client_handler.start()
+    # while True:
+    #     client_socket, client_address = server_socket.accept()
+    #     print(f'Accepted connection from {client_address}')
+    #     client_handler = Thread(target=handle_request, args=(client_socket,))
+    #     client_handler.start()
 
 def main():
     parser = argparse.ArgumentParser(description='Simple HTTP Server with Authorization')
