@@ -1,6 +1,14 @@
 import socket
 import argparse
 from threading import Thread
+import base64
+
+def check_authorization(username, password):
+    # TODO: change authorization logic
+    if username == 'admin' and password == 'admin':
+        return True
+    else:
+        return False
 
 def handle_request(client_socket):
     request_data = client_socket.recv(1024).decode('utf-8')
@@ -10,17 +18,40 @@ def handle_request(client_socket):
     request_lines = request_data.split('\r\n')
     method, path, _ = request_lines[0].split()
     
-    if method == 'GET':
-        response_data = 'HTTP/1.1 200 OK\r\n\r\nHello, this is a simple HTTP server!'
-    elif method == 'POST':
-        content_length = int(request_lines[-1].split(': ')[-1])
-        request_body = client_socket.recv(content_length).decode('utf-8')
-        response_data = f'HTTP/1.1 200 OK\r\n\r\nReceived POST data: {request_body}'
-    else:
-        response_data = 'HTTP/1.1 400 Bad Request\r\n\r\nInvalid request method'
+    auth_header = None
+    for line in request_lines:
+        if line.startswith('Authorization: '):
+            auth_header = line[len('Authorization: '):].strip()
+            break
+
+    connection_header = None
+    for line in request_lines:
+        if line.startswith('Connection: '):
+            connection_header = line[len('Connection: '):].strip()
+            break
     
+    if auth_header and auth_header.startswith('Basic '):
+        encoded_credentials = auth_header[len('Basic '):]
+        decoded_credentials = base64.b64decode(encoded_credentials).decode('utf-8')
+        username, password = decoded_credentials.split(':')
+        
+        if check_authorization(username,password):
+            if method == 'GET':
+                response_data = 'HTTP/1.1 200 OK\r\n\r\nHello, this is a simple HTTP server!'
+            elif method == 'POST':
+                content_length = int(request_lines[-1].split(': ')[-1])
+                request_body = client_socket.recv(content_length).decode('utf-8')
+                response_data = f'HTTP/1.1 200 OK\r\n\r\nReceived POST data: {request_body}'
+            else:
+                response_data = 'HTTP/1.1 400 Bad Request\r\n\r\nInvalid request method'
+        else:
+            response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nInvalid username or password'
+    else:
+        response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nAuthorization header missing or invalid'
+
     client_socket.sendall(response_data.encode('utf-8'))
-    client_socket.close()
+    if connection_header and connection_header == 'close':
+        client_socket.close()
 
 def run_server(host, port):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -36,7 +67,7 @@ def run_server(host, port):
         client_handler.start()
 
 def main():
-    parser = argparse.ArgumentParser(description='Simple HTTP Server')
+    parser = argparse.ArgumentParser(description='Simple HTTP Server with Authorization')
     parser.add_argument('-i', '--host', default='localhost', help='Server host')
     parser.add_argument('-p', '--port', type=int, default=8080, help='Server port')
     args = parser.parse_args()
