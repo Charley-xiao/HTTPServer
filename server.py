@@ -104,7 +104,10 @@ def parse_url(raw_path):
 
     query_params = {}
     if len(parts) > 1:
-        query_params = dict([p.split("=") for p in parts[1].split("&")])
+        try:
+            query_params = dict([p.split("=") for p in parts[1].split("&")])
+        except ValueError:
+            pass
 
     return path, query_params
 
@@ -210,9 +213,6 @@ def handle_request(client_socket):
         else:
             print('Unauthorized')
             response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nInvalid username or password'
-    elif raw_path.startswith('/data'):
-        handle_file_request(client_socket, raw_path, auth_header)
-        return
     elif raw_path == '/login' and method == 'GET':
         print('cookie_header: ', cookie_header)
         print('username_from_cookie: ', username_from_cookie)
@@ -264,14 +264,30 @@ def handle_request(client_socket):
             client_socket.close()
             return
     elif raw_path == '/index' and method == 'GET':
-        # Return the secure page
-        with open('index.html', 'r') as file:
-            index_page = file.read()
-            response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
+        if cookie_header and username_from_cookie:
+            with open('index.html', 'r') as file:
+                index_page = file.read()
+                response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
+            client_socket.sendall(response_data.encode('utf-8'))
+            # if connection_header and connection_header == 'close':
+            client_socket.close()
+            return
+        else:
+            response_data = 'HTTP/1.1 302 Found\r\nLocation: /login\r\n\r\n'
+            client_socket.sendall(response_data.encode('utf-8'))
+            client_socket.close()
+            return
+    elif raw_path.startswith('/logout') and method == 'GET':
+        with open('login.html', 'r') as file:
+            login_page = file.read()
+            response_data = 'HTTP/1.1 302 Found\r\nLocation: /login\r\nSet-Cookie: session-id=; Path=/; HttpOnly\r\n\r\n' + login_page
         client_socket.sendall(response_data.encode('utf-8'))
         # if connection_header and connection_header == 'close':
         client_socket.close()
         return
+    elif path.startswith('/data'):
+            handle_file_request(client_socket, raw_path, auth_header)
+            return
     else:
         response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nWWW-Authenticate: Basic realm="Authorization required"'
 
