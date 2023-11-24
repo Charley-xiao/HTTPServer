@@ -18,11 +18,19 @@ def generate_session_id(username):
 
 def set_cookie_header(username):
     session_id = generate_session_id(username)
+    print(f'Session ID generated from {username}: {session_id}')
     session_storage[session_id] = username 
     return f'Set-Cookie: session-id={session_id}; Path=/; HttpOnly\r\n'
 
 def get_username_from_cookie(cookie):
-    session_id = cookie.split('=')[1]
+    cookie_parts = cookie.split(';')
+    session_id = None
+    for cookie_part in cookie_parts:
+        if cookie_part.strip().startswith('session-id='):
+            session_id = cookie_part.strip()[len('session-id='):]
+            break
+    print(f'Session ID from cookie: {session_id}')
+    print(f'Session storage: {session_storage}')
     return session_storage.get(session_id, None)
 
 def check_authorization(username, password):
@@ -206,14 +214,20 @@ def handle_request(client_socket):
         handle_file_request(client_socket, raw_path, auth_header)
         return
     elif raw_path == '/login' and method == 'GET':
-        # Return the login page
-        with open('login.html', 'r') as file:
-            login_page = file.read()
-            response_data = 'HTTP/1.1 200 OK\r\n\r\n' + login_page
-        client_socket.sendall(response_data.encode('utf-8'))
-        # if connection_header and connection_header == 'close':
-        client_socket.close()
-        return
+        print('cookie_header: ', cookie_header)
+        print('username_from_cookie: ', username_from_cookie)
+        if cookie_header and username_from_cookie:
+            print(f'User from cookie: {username_from_cookie}')
+            response_data = f'HTTP/1.1 302 Found\r\nLocation: /index\r\n\r\n'
+        else:
+            # Return the login page
+            with open('login.html', 'r') as file:
+                login_page = file.read()
+                response_data = 'HTTP/1.1 200 OK\r\n\r\n' + login_page
+            client_socket.sendall(response_data.encode('utf-8'))
+            # if connection_header and connection_header == 'close':
+            client_socket.close()
+            return
     elif raw_path == '/login' and method == 'POST':
         # Check the credentials
         content_length = None
@@ -235,7 +249,8 @@ def handle_request(client_socket):
             else:
                 # Set a new session ID in the cookie for the user
                 print('Setting new session ID in cookie')
-                response_data = f'HTTP/1.1 200 OK\r\n{set_cookie_header(username)}\r\n\r\nHello, {username}!'
+                response_data = f'HTTP/1.1 302 Found\r\nLocation: /index\r\n{set_cookie_header(username)}\r\n\r\n'
+                client_socket.sendall(response_data.encode('utf-8'))
 
             response_data = f'HTTP/1.1 302 Found\r\nLocation: /index\r\n\r\n'
         else:
