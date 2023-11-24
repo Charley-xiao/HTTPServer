@@ -141,10 +141,18 @@ def handle_request(client_socket):
         print(f'Username: {username}\nPassword: {password}')
         if check_authorization(username,password):
             print('Authorized')
-            response_data = 'HTTP/1.1 200 OK\r\n\r\nHello, this is a simple HTTP server!'
+            response_data = 'HTTP/1.1 302 Found\r\nLocation: /index\r\n\r\n'
         else:
             print('Unauthorized')
             response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nInvalid username or password'
+    elif raw_path == '/index' and method == 'GET':
+        # Return the secure page
+        with open('index.html', 'r') as file:
+            index_page = file.read()
+            response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
+        client_socket.sendall(response_data.encode('utf-8'))
+        client_socket.close()
+        return
     else:
         response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nAuthorization header missing or invalid'
 
