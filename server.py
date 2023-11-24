@@ -36,11 +36,13 @@ def generate_session_id(username):
     session_id = hashlib.sha256(data.encode('utf-8')).hexdigest()
     return session_id
 
-def set_cookie_header(username):
+def set_cookie_header(username, expiration_days=7):
     session_id = generate_session_id(username)
     print(f'Session ID generated from {username}: {session_id}')
+    expiration_date = datetime.datetime.now() + datetime.timedelta(days=expiration_days)
+    formatted_expiration_date = expiration_date.strftime("%a, %d-%b-%Y %H:%M:%S GMT")
     session_storage[session_id] = username 
-    return f'Set-Cookie: session-id={session_id}; Path=/; HttpOnly\r\n'
+    return f'Set-Cookie: session-id={session_id}; Expires={formatted_expiration_date}; Path=/; HttpOnly\r\n'
 
 def get_username_from_cookie(cookie):
     cookie_parts = cookie.split(';')
@@ -67,19 +69,19 @@ def get_content_type(file_path):
 
 def handle_file_request(client_socket, path, auth_header):
     # Check if the client is authorized
-    if not auth_header or not auth_header.startswith('Basic '):
-        response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nWWW-Authenticate: Basic realm="Authorization required"'
-        client_socket.sendall(response_data.encode('utf-8'))
-        return
+    # if not auth_header or not auth_header.startswith('Basic '):
+    #     response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nWWW-Authenticate: Basic realm="Authorization required"'
+    #     client_socket.sendall(response_data.encode('utf-8'))
+    #     return
 
-    encoded_credentials = auth_header[len('Basic '):]
-    decoded_credentials = base64.b64decode(encoded_credentials).decode('utf-8')
-    username, password = decoded_credentials.split(':')
+    # encoded_credentials = auth_header[len('Basic '):]
+    # decoded_credentials = base64.b64decode(encoded_credentials).decode('utf-8')
+    # username, password = decoded_credentials.split(':')
 
-    if not check_authorization(username, password):
-        response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nInvalid username or password'
-        client_socket.sendall(response_data.encode('utf-8'))
-        return
+    # if not check_authorization(username, password):
+    #     response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nInvalid username or password'
+    #     client_socket.sendall(response_data.encode('utf-8'))
+    #     return
 
     file_path = f'./data{path}'
 
@@ -218,7 +220,17 @@ def handle_request(client_socket):
         query_value = query_params['q'][0]
         print(f'Query parameter q: {query_value}')
 
-    if auth_header and auth_header.startswith('Basic '):
+    if raw_path == '/favicon.svg':
+        with open('favicon.svg', 'rb') as file:
+            file_content = file.read()
+            content_length = len(file_content)
+            content_type = 'image/svg+xml'
+
+            response_data = f'HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {content_length}\r\n\r\n'
+            client_socket.sendall(response_data.encode('utf-8') + file_content)
+            client_socket.close()
+        return
+    elif auth_header and auth_header.startswith('Basic '):
         encoded_credentials = auth_header[len('Basic '):]
         decoded_credentials = base64.b64decode(encoded_credentials).decode('utf-8')
         username, password = decoded_credentials.split(':')
@@ -357,8 +369,11 @@ def handle_request(client_socket):
         client_socket.close()
         return
     elif path.startswith('/data'):
+        # first check if authorized
+        if cookie_header and username_from_cookie:
             handle_file_request(client_socket, raw_path, auth_header)
             return
+        response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nWWW-Authenticate: Basic realm="Authorization required"'
     else:
         response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nWWW-Authenticate: Basic realm="Authorization required"'
 
