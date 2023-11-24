@@ -118,6 +118,33 @@ def handle_request(client_socket):
         else:
             print('Unauthorized')
             response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nInvalid username or password'
+    elif raw_path == '/login' and method == 'GET':
+        # Return the login page
+        with open('login.html', 'r') as file:
+            login_page = file.read()
+            response_data = 'HTTP/1.1 200 OK\r\n\r\n' + login_page
+        client_socket.sendall(response_data.encode('utf-8'))
+        client_socket.close()
+        return
+    elif raw_path == '/login' and method == 'POST':
+        # Check the credentials
+        content_length = None
+        for line in request_lines:
+            if 'Content-Length' in line:
+                content_length = int(line.split(': ')[1])
+                break
+        print(f'Content length: {content_length}')
+        # request_body = client_socket.recv(content_length).decode('utf-8')
+        username, password = request_lines[-1].split('&')
+        username = username.split('=')[1]
+        password = password.split('=')[1]
+        print(f'Username: {username}\nPassword: {password}')
+        if check_authorization(username,password):
+            print('Authorized')
+            response_data = 'HTTP/1.1 200 OK\r\n\r\nHello, this is a simple HTTP server!'
+        else:
+            print('Unauthorized')
+            response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nInvalid username or password'
     else:
         response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nAuthorization header missing or invalid'
 
