@@ -157,7 +157,15 @@ def list_files_and_directories(path,username):
             entry_path = os.path.join(path, entry)
             if os.path.isfile(entry_path):
                 d_entry_path = entry_path.replace(f'/data','')
-                files_and_dirs.append(f'<p class="file"><a href="{d_entry_path}" style="color: gold;">{entry}</a></p>')
+                d_entry_path = d_entry_path.replace('\\','/')
+                delete_path = d_entry_path[1:]
+                files_and_dirs.append(f'''
+                    <p class="file">
+                        <!--<a href="{d_entry_path}" style="color: gold;">{entry}</a>-->
+                        {entry}
+                        <button class="downloadButton"><a href="{d_entry_path}">Download</a></button>
+                        <button class="deleteButton"><a href="/delete?path={delete_path}">Delete</a></button>
+                    </p>''')
             elif os.path.isdir(entry_path):
                 files_and_dirs.append(f'<p class="dir" onclick="toggleFolder(\'{entry}\')" id="{entry}">{entry}</p>')
                 nested_entries = list_files_and_directories(entry_path,username)
@@ -415,9 +423,16 @@ def handle_request(client_socket):
         # if connection_header and connection_header == 'close':
         client_socket.close()
         return
+    elif cookie_header and username_from_cookie:
+        # Have logged in but tried to access a page that doesn't exist
+        with open('404.html','r') as file:
+            page = file.read()
+            page = page.replace('insert_username',f'{username_from_cookie}')
+            response_data = 'HTTP/1.1 404 Not Found\r\n\r\n' + page
     elif path.startswith('/data'):
         # first check if authorized
         if cookie_header and username_from_cookie:
+            # TODO: check if the users match, otherwise return 403
             handle_file_request(client_socket, raw_path, auth_header)
             return
         response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nWWW-Authenticate: Basic realm="Authorization required"'

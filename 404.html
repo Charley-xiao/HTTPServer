@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
-    <title>File Management Master</title>
+    <title>File Management Master - 404 Not Found</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -30,7 +30,7 @@
         }
 
         #coolDiv {
-            background: #4285f4;
+            background: #e74c3c;
             color: #ffffff;
             padding: 2em;
             margin: 2em;
@@ -44,28 +44,9 @@
             transform: scale(1.1);
         }
 
-        .file, .dir {
-            margin: 0.5em 0;
-            padding: 0.5em;
-            border-radius: 5px;
-            display: flex;
-            align-items: center;
-            cursor: pointer;
+        h2 {
+            margin-bottom: 1em;
         }
-
-        .file::before{
-            content: '\1F4C4'; 
-            font-size: 1.2em;
-            margin-right: 0.5em;
-        }
-
-        .dir::before{
-            content: '\1F4C1'; 
-            font-size: 1.2em;
-            margin-right: 0.5em;
-        }
-
-        .nested { display: none; padding-left: 20px; }
 
         form {
             margin-top: 1em;
@@ -81,6 +62,10 @@
             border-radius: 5px;
         }
 
+        button:hover {
+            background-color: #c0392b;
+        }
+
         footer {
             padding: 1em;
             background: #2c3e50;
@@ -89,59 +74,15 @@
             bottom: 0;
             width: 100%;
         }
-
-        .downloadButton {
-            background-color: #27ae60; 
-            color: #ffffff;
-            padding: 5px 10px; 
-            font-size: 0.8em; 
-            border: none;
-            cursor: pointer;
-            border-radius: 5px;
-            margin-left: 10px; 
-            transition: background-color 0.3s;
-        }
-
-        .downloadButton:hover {
-            background-color: #219653;
-        }
-
-        a {
-            text-decoration: none;
-            color: white;
-        }
-
-        .deleteButton {
-            background-color: #e74c3c; 
-            color: #ffffff;
-            padding: 5px 10px; 
-            font-size: 0.8em; 
-            border: none;
-            cursor: pointer;
-            border-radius: 5px;
-            margin-left: 10px; 
-            transition: background-color 0.3s;
-        }
-
-        .deleteButton:hover {
-            background-color: #c0392b;
-        }
     </style>
 </head>
 <body>
     <header>
-        <h1>Welcome to File Management Master!</h1>
-        <h4>insert_username</h4>
+        <h1>404 Not Found</h1>
+        <h4>Sorry, insert_username, the page you're looking for doesn't exist.</h4>
     </header>
 
     <section>
-        <div id="coolDiv">
-            <h2>Directory Listing for insert_username:</h2>
-            <p class="file">1</p>
-        </div>
-        <form action="/logout" method="GET">
-            <button type="submit">Logout</button>
-        </form>
     </section>
 
     <footer>
