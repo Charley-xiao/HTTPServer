@@ -87,14 +87,30 @@ def handle_file_request(client_socket, path, auth_header):
 
     if os.path.exists(file_path):
         if os.path.isfile(file_path):
-            # Handle file download
-            with open(file_path, 'rb') as file:
-                file_content = file.read()
-                content_length = len(file_content)
-                content_type = get_content_type(file_path)
+            # Check if the file is a text file for preview
+            text_file_extensions = ['.txt', '.html', '.css', '.js', '.py']
+            _, file_extension = os.path.splitext(file_path)
+            is_text_file = file_extension.lower() in text_file_extensions
+            print(f'is_text_file for {file_path}: ', is_text_file)
 
-                response_data = f'HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {content_length}\r\n\r\n'
-                client_socket.sendall(response_data.encode('utf-8') + file_content)
+            if is_text_file:
+                # Preview text-based files
+                with open(file_path, 'r') as file:
+                    file_content = file.read()
+                    content_length = len(file_content)
+                    content_type = get_content_type(file_path)
+
+                    response_data = f'HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {content_length}\r\n\r\n{file_content}'
+                    client_socket.sendall(response_data.encode('utf-8'))
+                    client_socket.close()
+                return
+            else:
+                # Provide a link for non-text files
+                download_link = f'<a href="{path}" download>Download {os.path.basename(file_path)}</a>'
+                response_data = f'HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {len(download_link)}\r\n\r\n{download_link}'
+                client_socket.sendall(response_data.encode('utf-8'))
+                client_socket.close()
+                return
         elif os.path.isdir(file_path):
             # Handle directory listing
             files = os.listdir(file_path)
@@ -133,6 +149,22 @@ def parse_url(raw_path):
             pass
 
     return path, query_params
+
+def list_files_and_directories(path,username):
+    files_and_dirs = []
+    try:
+        for entry in os.listdir(path):
+            entry_path = os.path.join(path, entry)
+            if os.path.isfile(entry_path):
+                d_entry_path = entry_path.replace(f'/data','')
+                files_and_dirs.append(f'<p class="file"><a href="{d_entry_path}" style="color: gold;">{entry}</a></p>')
+            elif os.path.isdir(entry_path):
+                files_and_dirs.append(f'<p class="dir" onclick="toggleFolder(\'{entry}\')" id="{entry}">{entry}</p>')
+                nested_entries = list_files_and_directories(entry_path,username)
+                files_and_dirs.append(f'<div class="nested" id="nested_{entry}">{"".join(nested_entries)}</div>')
+        return ''.join(files_and_dirs)
+    except FileNotFoundError:
+        return ''
 
 def handle_registration(client_socket, request_lines):
     content_length = None
@@ -339,6 +371,21 @@ def handle_request(client_socket):
         if cookie_header and username_from_cookie:
             with open('index.html', 'r') as file:
                 index_page = file.read()
+                index_page = index_page.replace('insert_username',f'{username_from_cookie}')
+                index_page = index_page.replace('<p class="file">1</p>',list_files_and_directories(f'./data/{username_from_cookie}',username_from_cookie))
+                index_page = index_page.replace('<script></script>','''
+                    <script>
+                    function toggleFolder(folderId){
+                        var x = document.getElementById(\'nested_\' + folderId);
+                        if (x.style.display === "none" || x.style.display === \"\") {
+                            x.style.display = "block";
+                        } 
+                        else {
+                            x.style.display = "none";
+                        }
+                    }
+                    </script>
+                ''')
                 response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
             client_socket.sendall(response_data.encode('utf-8'))
             # if connection_header and connection_header == 'close':

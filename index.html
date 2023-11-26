@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
-    <title>Main Page</title>
+    <title>File Management Master</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -24,6 +24,9 @@
 
         section {
             padding: 2em;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
         #coolDiv {
@@ -34,10 +37,48 @@
             border-radius: 10px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
             transition: transform 0.3s;
+            text-align: left;
         }
 
         #coolDiv:hover {
             transform: scale(1.1);
+        }
+
+        .file, .dir {
+            margin: 0.5em 0;
+            padding: 0.5em;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .file::before{
+            content: '\1F4C4'; 
+            font-size: 1.2em;
+            margin-right: 0.5em;
+        }
+
+        .dir::before{
+            content: '\1F4C1'; 
+            font-size: 1.2em;
+            margin-right: 0.5em;
+        }
+
+        .nested { display: none; padding-left: 20px; }
+
+        form {
+            margin-top: 1em;
+        }
+
+        button {
+            background-color: #e74c3c;
+            color: #ffffff;
+            padding: 10px 20px;
+            font-size: 1em;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
         }
 
         footer {
@@ -52,26 +93,24 @@
 </head>
 <body>
     <header>
-        <h1>Welcome to File Management System!</h1>
+        <h1>Welcome to File Management Master!</h1>
+        <h4>insert_username</h4>
     </header>
 
     <section>
         <div id="coolDiv">
-            <h2>Welcome to the Main Page of this site!</h2>
-            <p>This is CS305 Project.</p>
-            <p>Hover over the box below for some magic!</p>
+            <h2>Directory Listing for insert_username:</h2>
+            <p class="file">1</p>
         </div>
         <form action="/logout" method="GET">
-            <button type="submit" style="background-color: #e74c3c; color: #ffffff; padding: 10px 20px; font-size: 1em; border: none; cursor: pointer; border-radius: 5px;">Logout</button>
+            <button type="submit">Logout</button>
         </form>
     </section>
 
     <footer>
-        <p>&copy; 2023 Main Page. All rights reserved.</p>
+        <!--<p>&copy; 2023 Main Page. All rights reserved.</p>-->
     </footer>
 
-    <script>
-        // You can add JavaScript functionality here if needed
-    </script>
+    <script></script>
 </body>
 </html>
