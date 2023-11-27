@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <title>File Management Master - Upload Files</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(to right, #3498db, #8e44ad);
+            color: #ffffff;
+            text-align: center;
+        }
+
+        header {
+            padding: 1em;
+            background: #2c3e50;
+            color: #ffffff;
+            font-size: 1.5em;
+        }
+
+        section {
+            padding: 2em;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #coolDiv {
+            background: #27ae60;
+            color: #ffffff;
+            padding: 2em;
+            margin: 2em;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s;
+            text-align: left;
+        }
+
+        #coolDiv:hover {
+            transform: scale(1.1);
+        }
+
+        h2 {
+            margin-bottom: 1em;
+        }
+
+        form {
+            margin-top: 1em;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Style for custom file input */
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+
+        .file-input-wrapper input[type=file] {
+            font-size: 100px;
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .file-input-button {
+            display: inline-block;
+            background: #3498db;
+            color: #ffffff;
+            padding: 10px 20px;
+            font-size: 1em;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        .file-input-button:hover {
+            background-color: #2980b9;
+        }
+
+        .file-name {
+            margin-top: 0.5em;
+            color: #2c3e50;
+        }
+
+        button {
+            background-color: #3498db;
+            color: #ffffff;
+            padding: 10px 20px;
+            font-size: 1em;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-top: 1em;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        footer {
+            padding: 1em;
+            background: #2c3e50;
+            color: #ffffff;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+        }
+
+        .deleteButton {
+            background-color: #e74c3c; 
+            color: #ffffff;
+            padding: 5px 10px; 
+            font-size: 0.8em; 
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-left: 10px; 
+            transition: background-color 0.3s;
+        }
+
+        .deleteButton:hover {
+            background-color: #c0392b;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Upload Files</h1>
+        <h4>Choose files to upload to File Management Master</h4>
+        <h4>Uploading files to <a id="path">insert_path</a></h4>
+    </header>
+
+    <section>
+        <div id="coolDiv">
+            <h2>Instructions:</h2>
+            <p>1. Click the button below to select files.</p>
+            <p>2. Upload will begin automatically.</p>
+        </div>
+        <form action="/upload" method="POST" enctype="multipart/form-data" id="uploadForm">
+            <label for="file" class="file-input-wrapper">
+                <span class="file-input-button">Choose File</span>
+                <input type="file" name="file" id="file" accept=".*" onchange="displayFileName(this)">
+            </label>
+            <span class="file-name" id="file-name">No file selected</span>
+            <button type="submit">Upload</button>
+        </form>
+        <button class="deleteButton" onclick="window.location.href='/index'">Return</button>
+    </section>
+
+    <footer>
+        <!--<p>&copy; 2023 Main Page. All rights reserved.</p>-->
+    </footer>
+
+    <script>
+        function displayFileName(input) {
+            const fileName = input.files[0].name;
+            document.getElementById('file-name').innerText = `File selected: ${fileName}`;
+            const currentPath = document.getElementById('path').innerText;
+            document.getElementById('uploadForm').action = `/upload?path=${currentPath}`;
+        }
+    </script>
+</body>
+</html>

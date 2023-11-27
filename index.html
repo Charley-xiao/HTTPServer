@@ -126,6 +126,27 @@
         .deleteButton:hover {
             background-color: #c0392b;
         }
+
+        .uploadButton {
+            background-color: #3498db; 
+            color: #ffffff;
+            padding: 5px 10px; 
+            font-size: 0.8em; 
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-left: 10px; 
+            transition: background-color 0.3s;
+        }
+
+        .uploadButton:hover {
+            background-color: #2980b9;
+        }
+
+        .nested {
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
     </style>
 </head>
 <body>
@@ -137,6 +158,7 @@
     <section>
         <div id="coolDiv">
             <h2>Directory Listing for insert_username:</h2>
+            <button class="uploadButton"><a href="/upload?path=/insert_username">Upload</a></button>
             <p class="file">1</p>
         </div>
         <form action="/logout" method="GET">

@@ -25,7 +25,7 @@ def initialize_database():
     ''')
 
     cursor.execute('INSERT OR REPLACE INTO users (username, password, email) VALUES (?, ?, ?)', ('admin', 'admin','admin@mail.sustech.edu.cn'))
-    cursor.execute('INSERT OR REPLACE INTO users (username, password, email) VALUES (?, ?, ?)', ('client1', 'password1','client1@google.com'))
+    cursor.execute('INSERT OR REPLACE INTO users (username, password, email) VALUES (?, ?, ?)', ('client1', '123','client1@google.com'))
 
     conn.commit()
     conn.close()
@@ -155,10 +155,10 @@ def list_files_and_directories(path,username):
     try:
         for entry in os.listdir(path):
             entry_path = os.path.join(path, entry)
+            d_entry_path = entry_path.replace(f'/data','')
+            d_entry_path = d_entry_path.replace('\\','/')
+            delete_path = d_entry_path[1:]
             if os.path.isfile(entry_path):
-                d_entry_path = entry_path.replace(f'/data','')
-                d_entry_path = d_entry_path.replace('\\','/')
-                delete_path = d_entry_path[1:]
                 files_and_dirs.append(f'''
                     <p class="file">
                         <!--<a href="{d_entry_path}" style="color: gold;">{entry}</a>-->
@@ -167,12 +167,55 @@ def list_files_and_directories(path,username):
                         <button class="deleteButton"><a href="/delete?path={delete_path}">Delete</a></button>
                     </p>''')
             elif os.path.isdir(entry_path):
-                files_and_dirs.append(f'<p class="dir" onclick="toggleFolder(\'{entry}\')" id="{entry}">{entry}</p>')
+                files_and_dirs.append(f'''
+                    <p class="dir" onclick="toggleFolder(\'{entry}\')" id="{entry}">
+                        {entry}
+                        <button class="uploadButton"><a href="/upload?path={d_entry_path[1:]}">Upload</a></button>
+                        <button class="deleteButton"><a href="/delete?path={d_entry_path[1:]}">Delete</a></button>  
+                    </p>
+                ''')
                 nested_entries = list_files_and_directories(entry_path,username)
                 files_and_dirs.append(f'<div class="nested" id="nested_{entry}">{"".join(nested_entries)}</div>')
         return ''.join(files_and_dirs)
     except FileNotFoundError:
         return ''
+
+def list_files_and_directories_plain(path,username):
+    files_and_dirs = []
+    try:
+        for entry in os.listdir(path):
+            entry_path = os.path.join(path, entry)
+            d_entry_path = entry_path.replace(f'/data','')
+            d_entry_path = d_entry_path.replace('\\','/')
+            delete_path = d_entry_path[1:]
+            if os.path.isfile(entry_path):
+                files_and_dirs.append(f'{entry}')
+            elif os.path.isdir(entry_path):
+                files_and_dirs.append(f'{entry}')
+                nested_entries = list_files_and_directories_plain(entry_path,username)
+                files_and_dirs.append(f'{"".join(nested_entries)}')
+        return ''.join(files_and_dirs)
+    except FileNotFoundError:
+        return ''
+    
+def return_index_page(username):
+    with open('index.html', 'r') as file:
+        index_page = file.read()
+        index_page = index_page.replace('insert_username',f'{username}')
+        index_page = index_page.replace('<p class="file">1</p>',list_files_and_directories(f'./data/{username}',username))
+        index_page = index_page.replace('<script></script>','''<script>
+            function toggleFolder(folderId){
+                var x = document.getElementById(\'nested_\' + folderId);
+                if (x.style.display === "none" || x.style.display === \"\") {
+                    x.style.display = "block";
+                } 
+                else {
+                    x.style.display = "none";
+                }
+            }
+            </script>
+        ''')
+        return index_page
 
 def handle_registration(client_socket, request_lines):
     content_length = None
@@ -202,6 +245,8 @@ def handle_registration(client_socket, request_lines):
         client_socket.sendall(response_data.encode('utf-8'))
         # if connection_header and connection_header == 'close':
         client_socket.close()
+        # create root directory for the user
+        os.mkdir(f'./data/{username}')
         return
     else:
         conn.close()
@@ -256,9 +301,14 @@ def handle_request(client_socket):
     print(f'Cookie header: {cookie_header}')
     username_from_cookie = get_username_from_cookie(cookie_header) if cookie_header else None
 
-    if 'q' in query_params: # TODO: change the logic
-        query_value = query_params['q'][0]
-        print(f'Query parameter q: {query_value}')
+    test_param = None
+    if 'SUSTech-HTTP' in query_params:
+        test_param = query_params['SUSTech-HTTP'][0]
+        print(f'Query parameter SUSTech-HTTP: {test_param}')
+
+    if 'path' in query_params:
+        upload_path = query_params['path']
+        print(f'Query parameter path: {upload_path}')
 
     if raw_path == '/favicon.svg':
         with open('favicon.svg', 'rb') as file:
@@ -285,6 +335,8 @@ def handle_request(client_socket):
                 # Set a new session ID in the cookie for the user
                 print('Setting new session ID in cookie')
                 response_data = f'HTTP/1.1 200 OK\r\n{set_cookie_header(username)}\r\n\r\nHello, {username}!'
+                client_socket.sendall(response_data.encode('utf-8'))
+                client_socket.close()
 
             if range_header and method == 'GET': # TODO: support multirange requests
                 try:
@@ -313,12 +365,30 @@ def handle_request(client_socket):
                     
             if method == 'GET':
                 print('GET')
-                handle_file_request(client_socket, raw_path, auth_header)
-                return
+                if test_param and test_param.startswith('1'): # List the files and directories
+                    print(f'Listing files and directories in ./data/{username}')
+                    response_data = 'HTTP/1.1 200 OK\r\n\r\n' + list_files_and_directories_plain(f'./data/{username}',username)
+                elif test_param and test_param.startswith('0'): # Return the index page
+                    print('Returning index page')
+                    index_page = return_index_page(username)
+                    response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
+                elif raw_path == '/':
+                    print('Returning index page')
+                    index_page = return_index_page(username)
+                    response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
+                else:
+                    handle_file_request(client_socket, f'/{username}{raw_path}', auth_header)
+                    return
             elif method == 'POST':
-                content_length = int(request_lines[-1].split(': ')[-1])
+                content_length = None
+                for line in request_lines:
+                    if 'Content-Length' in line:
+                        content_length = int(line.split(': ')[1])
+                        break
                 request_body = client_socket.recv(content_length).decode('utf-8')
                 response_data = f'HTTP/1.1 200 OK\r\n\r\nReceived POST data: {request_body}'
+            elif method == 'HEAD':
+                response_data = f'HTTP/1.1 200 OK\r\n\r\n'
             else:
                 response_data = 'HTTP/1.1 400 Bad Request\r\n\r\nInvalid request method'
             
@@ -377,24 +447,8 @@ def handle_request(client_socket):
             return
     elif raw_path == '/index' and method == 'GET':
         if cookie_header and username_from_cookie:
-            with open('index.html', 'r') as file:
-                index_page = file.read()
-                index_page = index_page.replace('insert_username',f'{username_from_cookie}')
-                index_page = index_page.replace('<p class="file">1</p>',list_files_and_directories(f'./data/{username_from_cookie}',username_from_cookie))
-                index_page = index_page.replace('<script></script>','''
-                    <script>
-                    function toggleFolder(folderId){
-                        var x = document.getElementById(\'nested_\' + folderId);
-                        if (x.style.display === "none" || x.style.display === \"\") {
-                            x.style.display = "block";
-                        } 
-                        else {
-                            x.style.display = "none";
-                        }
-                    }
-                    </script>
-                ''')
-                response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
+            index_page = return_index_page(username_from_cookie)
+            response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
             client_socket.sendall(response_data.encode('utf-8'))
             # if connection_header and connection_header == 'close':
             client_socket.close()
@@ -423,17 +477,73 @@ def handle_request(client_socket):
         # if connection_header and connection_header == 'close':
         client_socket.close()
         return
+    elif raw_path.startswith('/upload') and method == 'GET':
+        if cookie_header and username_from_cookie:
+            with open('upload.html', 'r') as file:
+                upload_page = file.read()
+                upload_page = upload_page.replace('insert_username',f'{username_from_cookie}')
+                tmp = query_params['path']
+                upload_page = upload_page.replace('insert_path',f'{tmp}')
+                response_data = 'HTTP/1.1 200 OK\r\n\r\n' + upload_page
+            client_socket.sendall(response_data.encode('utf-8'))
+            # if connection_header and connection_header == 'close':
+            client_socket.close()
+            return
+        else:
+            response_data = 'HTTP/1.1 302 Found\r\nLocation: /login\r\n\r\n'
+            client_socket.sendall(response_data.encode('utf-8'))
+            client_socket.close()
+            return
+    elif raw_path.startswith('/upload') and method == 'POST':
+        if cookie_header and username_from_cookie:
+            content_length = None
+            for line in request_lines:
+                if 'Content-Length' in line:
+                    content_length = int(line.split(': ')[1])
+                    break
+            print(f'Content length: {content_length}')
+            request_body = client_socket.recv(content_length).decode('utf-8')
+            print(f'Request body: {request_body}')
+            file_name = request_body.split('filename="')[1].split('"')[0]
+            print(f'File name: {file_name}')
+            file_content = request_body.split('\r\n\r\n',1)
+            file_content = file_content[1].split('\r\n------')[0]
+            print(f'File content: {file_content}')
+            tmp = query_params['path']
+            # convert file_content to bytes-like object
+            file_content = file_content.encode('utf-8')
+            with open(f'./data/{tmp}/{file_name}','wb') as file:
+                file.write(file_content)
+            response_data = f'HTTP/1.1 302 Found\r\nLocation: /index\r\n\r\n'
+            client_socket.sendall(response_data.encode('utf-8'))
+            client_socket.close()
+            return
+        else:
+            response_data = 'HTTP/1.1 302 Found\r\nLocation: /login\r\n\r\n'
+            client_socket.sendall(response_data.encode('utf-8'))
+            client_socket.close()
+            return
     elif cookie_header and username_from_cookie:
-        # Have logged in but tried to access a page that doesn't exist
-        with open('404.html','r') as file:
-            page = file.read()
-            page = page.replace('insert_username',f'{username_from_cookie}')
-            response_data = 'HTTP/1.1 404 Not Found\r\n\r\n' + page
+        if raw_path == '/':
+            print('Returning index page')
+            index_page = return_index_page(username_from_cookie)
+            response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
+        else:
+            # Have logged in but tried to access a page that doesn't exist
+            with open('404.html','r') as file:
+                page = file.read()
+                page = page.replace('insert_username',f'{username_from_cookie}')
+                response_data = 'HTTP/1.1 404 Not Found\r\n\r\n' + page
     elif path.startswith('/data'):
         # first check if authorized
         if cookie_header and username_from_cookie:
             # TODO: check if the users match, otherwise return 403
-            handle_file_request(client_socket, raw_path, auth_header)
+            if raw_path == '/':
+                print('Returning index page')
+                index_page = return_index_page(username_from_cookie)
+                response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
+            else:
+                handle_file_request(client_socket, raw_path, auth_header)
             return
         response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nWWW-Authenticate: Basic realm="Authorization required"'
     else:

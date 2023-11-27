@@ -1,0 +1,21 @@
+A. English: 1h+: 22:00~23:00, Thur. 10:00~12:00
+- A.1. GRE
+- - A.1.1. Vocabulary
+- - A.1.2. Verbal Reasoning
+- - A.1.3. Quantitative Reasoning
+- - A.1.4. Others
+- A.2. English Reading Comprehension (National Geographic, World of English)
+
+B. Academic: 1h+: 21:00~22:00, Thur. 14:00~16:00
+- B.1. Review
+- B.2. Homework
+- B.3. Preview
+
+C. Sports: 0.5h: 23:30~24:00, Thur. Evening or Night
+- C.1. Jogging 2km+
+
+D. Research: 1h: Thur. 16:00~17:00
+- D.1. Diffusion Model
+
+E. Spanish: 0.5h: Thur. 17:00~17:30
+- E.1. Español Moderno 3
