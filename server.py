@@ -82,8 +82,10 @@ def handle_file_request(client_socket, path, auth_header):
     #     response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nInvalid username or password'
     #     client_socket.sendall(response_data.encode('utf-8'))
     #     return
-
+    preview_disabled = path.split('?p=')[1] if '?p=' in path else 0
+    path = path.split('?p=')[0]
     file_path = f'./data{path}'
+    print(file_path)
 
     if os.path.exists(file_path):
         if os.path.isfile(file_path):
@@ -93,23 +95,39 @@ def handle_file_request(client_socket, path, auth_header):
             is_text_file = file_extension.lower() in text_file_extensions
             print(f'is_text_file for {file_path}: ', is_text_file)
 
-            if is_text_file:
+            if is_text_file and not preview_disabled:
                 # Preview text-based files
-                with open(file_path, 'r') as file:
-                    file_content = file.read()
-                    content_length = len(file_content)
-                    content_type = get_content_type(file_path)
-
-                    response_data = f'HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {content_length}\r\n\r\n{file_content}'
+                with open('preview.html', 'r') as preview:
+                    preview_page = preview.read()
+                    preview_page = preview_page.replace('insert_filename', f'{os.path.basename(file_path)}')
+                    preview_page = preview_page.replace('insert_file_content', f'{open(file_path, "r").read()}')
+                    preview_page = preview_page.replace('<a>Download</a>', f'<a href="{path}?p=1" download>Download {os.path.basename(file_path)}</a>')
+                    response_data = f'HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {len(preview_page)}\r\n\r\n{preview_page}'
+                    client_socket.sendall(response_data.encode('utf-8'))
+                    client_socket.close()
+                return
+            elif not preview_disabled:
+                with open('preview.html', 'r') as preview:
+                    preview_page = preview.read()
+                    preview_page = preview_page.replace('insert_filename', f'{os.path.basename(file_path)}')
+                    preview_page = preview_page.replace('<h4>File Details:</h4>', '<h2>This file cannot be previewed.</h2>')
+                    preview_page = preview_page.replace('<div class="file-preview">insert_file_content</div>','')
+                    preview_page = preview_page.replace('<a>Download</a>', f'<a href="{path}?p=1" download>Download {os.path.basename(file_path)}</a>')
+                    response_data = f'HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {len(preview_page)}\r\n\r\n{preview_page}'
                     client_socket.sendall(response_data.encode('utf-8'))
                     client_socket.close()
                 return
             else:
-                # Provide a link for non-text files
-                download_link = f'<a href="{path}" download>Download {os.path.basename(file_path)}</a>'
-                response_data = f'HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {len(download_link)}\r\n\r\n{download_link}'
-                client_socket.sendall(response_data.encode('utf-8'))
-                client_socket.close()
+                # Download the file
+                with open(file_path, 'rb') as file:
+                    file_content = file.read()
+                    content_length = len(file_content)
+                    content_type = get_content_type(file_path)
+                    print(f'Content type: {content_type}')
+
+                    response_data = f'HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {content_length}\r\n\r\n'
+                    client_socket.sendall(response_data.encode('utf-8') + file_content)
+                    client_socket.close()
                 return
         elif os.path.isdir(file_path):
             # Handle directory listing
@@ -504,7 +522,7 @@ def handle_request(client_socket):
             print(f'Content length: {content_length}')
             request_body = client_socket.recv(content_length).decode('utf-8')
             print(f'Request body: {request_body}')
-            file_name = request_body.split('filename="')[1].split('"')[0]
+            file_name = ''.join(request_lines).split('filename="')[1].split('"')[0]
             print(f'File name: {file_name}')
             file_content = request_body.split('\r\n\r\n',1)
             file_content = file_content[1].split('\r\n------')[0]
@@ -523,17 +541,6 @@ def handle_request(client_socket):
             client_socket.sendall(response_data.encode('utf-8'))
             client_socket.close()
             return
-    elif cookie_header and username_from_cookie:
-        if raw_path == '/':
-            print('Returning index page')
-            index_page = return_index_page(username_from_cookie)
-            response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
-        else:
-            # Have logged in but tried to access a page that doesn't exist
-            with open('404.html','r') as file:
-                page = file.read()
-                page = page.replace('insert_username',f'{username_from_cookie}')
-                response_data = 'HTTP/1.1 404 Not Found\r\n\r\n' + page
     elif path.startswith('/data'):
         # first check if authorized
         if cookie_header and username_from_cookie:
@@ -546,6 +553,18 @@ def handle_request(client_socket):
                 handle_file_request(client_socket, raw_path, auth_header)
             return
         response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nWWW-Authenticate: Basic realm="Authorization required"'
+    elif cookie_header and username_from_cookie:
+        if raw_path == '/':
+            print('Returning index page')
+            index_page = return_index_page(username_from_cookie)
+            response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
+        else:
+            # Have logged in but tried to access a page that doesn't exist
+            with open('404.html','r') as file:
+                page = file.read()
+                page = page.replace('insert_username',f'{username_from_cookie}')
+                response_data = 'HTTP/1.1 404 Not Found\r\n\r\n' + page
+    
     else:
         response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nWWW-Authenticate: Basic realm="Authorization required"'
 
