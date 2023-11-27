@@ -219,7 +219,7 @@ def list_files_and_directories_plain(path,username):
                 files_and_dirs.append(f'{entry}')
                 nested_entries = list_files_and_directories_plain(entry_path,username)
                 files_and_dirs.append(f'{"".join(nested_entries)}')
-        return ''.join(files_and_dirs)
+        return ','.join(files_and_dirs)
     except FileNotFoundError:
         return ''
     
@@ -350,76 +350,99 @@ def handle_request(client_socket):
         decoded_credentials = base64.b64decode(encoded_credentials).decode('utf-8')
         username, password = decoded_credentials.split(':')
         print(f'Username: {username}\nPassword: {password}')
-        
-        if check_authorization(username,password):
-            print('Authorized')
-            if cookie_header and username_from_cookie:
-                print(f'User from cookie: {username_from_cookie}')
-                response_data = f'HTTP/1.1 200 OK\r\n{set_cookie_header(username_from_cookie)}\r\n\r\nHello, {username_from_cookie}!'
-            else:
-                # Set a new session ID in the cookie for the user
-                print('Setting new session ID in cookie')
-                response_data = f'HTTP/1.1 200 OK\r\n{set_cookie_header(username)}\r\n\r\nHello, {username}!'
-                client_socket.sendall(response_data.encode('utf-8'))
-                client_socket.close()
 
-            if range_header and method == 'GET': # TODO: support multirange requests
-                try:
-                    range_start, range_end = map(int, range_header[len('bytes='):].split('-'))
-                except ValueError:
-                    response_data = 'HTTP/1.1 400 Bad Request\r\n\r\nInvalid Range header'
-                    client_socket.sendall(response_data.encode('utf-8'))
-                    # if connection_header and connection_header == 'close':
-                    client_socket.close()
-                    return
-
-                request_file_path = path[1:]
-                file_size = os.path.getsize(request_file_path)
-
-                if 0 <= range_start < file_size and range_start <= range_end < file_size:
-                    with open(request_file_path, 'rb') as file:
-                        file.seek(range_start)
-                        content = file.read(range_end - range_start + 1)
-                        response_data = f'HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {range_start}-{range_end}/{file_size}\r\n\r\n'
-                        client_socket.sendall(response_data.encode('utf-8') + content)
-                        # if connection_header and connection_header == 'close':
-                        client_socket.close()
-                        return
-                else:
-                    response_data = 'HTTP/1.1 416 Range Not Satisfiable\r\n\r\n'
-                    
-            if method == 'GET':
-                print('GET')
-                if test_param and test_param.startswith('1'): # List the files and directories
-                    print(f'Listing files and directories in ./data/{username}')
-                    response_data = 'HTTP/1.1 200 OK\r\n\r\n' + list_files_and_directories_plain(f'./data/{username}',username)
-                elif test_param and test_param.startswith('0'): # Return the index page
-                    print('Returning index page')
-                    index_page = return_index_page(username)
-                    response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
-                elif raw_path == '/':
-                    print('Returning index page')
-                    index_page = return_index_page(username)
-                    response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
-                else:
-                    handle_file_request(client_socket, f'/{username}{raw_path}', auth_header)
-                    return
-            elif method == 'POST':
-                content_length = None
-                for line in request_lines:
-                    if 'Content-Length' in line:
-                        content_length = int(line.split(': ')[1])
-                        break
-                request_body = client_socket.recv(content_length).decode('utf-8')
-                response_data = f'HTTP/1.1 200 OK\r\n\r\nReceived POST data: {request_body}'
-            elif method == 'HEAD':
-                response_data = f'HTTP/1.1 200 OK\r\n\r\n'
-            else:
-                response_data = 'HTTP/1.1 400 Bad Request\r\n\r\nInvalid request method'
-            
-        else:
-            print('Unauthorized')
+        if not check_authorization(username,password):
             response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nInvalid username or password'
+            client_socket.sendall(response_data.encode('utf-8'))
+            return
+        if not cookie_header or not username_from_cookie:
+            print('Setting new session ID in cookie')
+            response_data = f'HTTP/1.1 200 OK\r\n{set_cookie_header(username)}\r\n\r\nHello, {username}!'
+            client_socket.sendall(response_data.encode('utf-8'))
+            client_socket.close()
+            return
+        # if check_authorization(username,password):
+        #     print('Authorized')
+        #     if cookie_header and username_from_cookie:
+        #         print(f'User from cookie: {username_from_cookie}')
+        #         response_data = f'HTTP/1.1 200 OK\r\n{set_cookie_header(username_from_cookie)}\r\n\r\nHello, {username_from_cookie}!'
+        #     else:
+        #         # Set a new session ID in the cookie for the user
+        #         print('Setting new session ID in cookie')
+        #         response_data = f'HTTP/1.1 200 OK\r\n{set_cookie_header(username)}\r\n\r\nHello, {username}!'
+        #         client_socket.sendall(response_data.encode('utf-8'))
+        #         client_socket.close()
+
+        #     if range_header and method == 'GET': # TODO: support multirange requests
+        #         try:
+        #             range_start, range_end = map(int, range_header[len('bytes='):].split('-'))
+        #         except ValueError:
+        #             response_data = 'HTTP/1.1 400 Bad Request\r\n\r\nInvalid Range header'
+        #             client_socket.sendall(response_data.encode('utf-8'))
+        #             # if connection_header and connection_header == 'close':
+        #             client_socket.close()
+        #             return
+
+        #         request_file_path = path[1:]
+        #         file_size = os.path.getsize(request_file_path)
+
+        #         if 0 <= range_start < file_size and range_start <= range_end < file_size:
+        #             with open(request_file_path, 'rb') as file:
+        #                 file.seek(range_start)
+        #                 content = file.read(range_end - range_start + 1)
+        #                 response_data = f'HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {range_start}-{range_end}/{file_size}\r\n\r\n'
+        #                 client_socket.sendall(response_data.encode('utf-8') + content)
+        #                 # if connection_header and connection_header == 'close':
+        #                 client_socket.close()
+        #                 return
+        #         else:
+        #             response_data = 'HTTP/1.1 416 Range Not Satisfiable\r\n\r\n'
+                    
+        #     if method == 'GET':
+        #         print('GET')
+        #         if test_param and test_param.startswith('1'): # List the files and directories
+        #             print(f'Listing files and directories in ./data/{username}')
+        #             response_data = 'HTTP/1.1 200 OK\r\n\r\n' + list_files_and_directories_plain(f'./data/{username}',username)
+        #         elif test_param and test_param.startswith('0'): # Return the index page
+        #             print('Returning index page')
+        #             index_page = return_index_page(username)
+        #             response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
+        #         elif raw_path == '/':
+        #             print('Returning index page')
+        #             index_page = return_index_page(username)
+        #             response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
+        #         else:
+        #             handle_file_request(client_socket, f'/{username}{raw_path}', auth_header)
+        #             return
+        #     elif method == 'POST':
+        #         content_length = None
+        #         for line in request_lines:
+        #             if 'Content-Length' in line:
+        #                 content_length = int(line.split(': ')[1])
+        #                 break
+        #         request_body = client_socket.recv(content_length).decode('utf-8')
+        #         response_data = f'HTTP/1.1 200 OK\r\n\r\nReceived POST data: {request_body}'
+        #     elif method == 'HEAD':
+        #         response_data = f'HTTP/1.1 200 OK\r\n\r\n'
+        #     else:
+        #         response_data = 'HTTP/1.1 400 Bad Request\r\n\r\nInvalid request method'
+            
+        # else:
+        #     print('Unauthorized')
+        #     response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nInvalid username or password'
+    
+    if method == 'HEAD':
+        if cookie_header and username_from_cookie or auth_header and auth_header.startswith('Basic ') and check_authorization(username,password):
+            response_data = f'HTTP/1.1 200 OK\r\n\r\n'
+        else:
+            response_data = f'HTTP/1.1 401 Unauthorized\r\n\r\n'
+    elif test_param and test_param.startswith('1'): # List the files and directories
+        print(f'Listing files and directories in ./data/{username}')
+        response_data = 'HTTP/1.1 200 OK\r\n\r\n' + list_files_and_directories_plain(f'./data/{username}',username)
+    elif test_param and test_param.startswith('0'): # Return the index page
+        print('Returning index page')
+        index_page = return_index_page(username)
+        response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
     elif raw_path == '/login' and method == 'GET':
         print('cookie_header: ', cookie_header)
         print('username_from_cookie: ', username_from_cookie)
@@ -592,16 +615,21 @@ def handle_request(client_socket):
         response_data = 'HTTP/1.1 405 Method Not Allowed\r\n\r\n'
     elif path.startswith('/data'):
         # first check if authorized
-        if cookie_header and username_from_cookie:
+        if cookie_header and username_from_cookie or auth_header and auth_header.startswith('Basic ') and check_authorization(username,password):
             # TODO: check if the users match, otherwise return 403
             if raw_path == '/':
                 print('Returning index page')
                 index_page = return_index_page(username_from_cookie)
+                print('Returned')
                 response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
+                client_socket.sendall(response_data.encode('utf-8'))
+                # if connection_header and connection_header == 'close':
+                client_socket.close()
             else:
                 handle_file_request(client_socket, raw_path, auth_header)
-            return
-        response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nWWW-Authenticate: Basic realm="Authorization required"'
+                return
+        else:
+            response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nWWW-Authenticate: Basic realm="Authorization required"'
     elif cookie_header and username_from_cookie:
         if raw_path == '/':
             print('Returning index page')
