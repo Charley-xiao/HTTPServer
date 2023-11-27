@@ -8,6 +8,7 @@ import hashlib
 import datetime
 import mimetypes
 import sqlite3
+import shutil
 
 session_storage = {}
 DATABASE_FILE = 'users.db'
@@ -182,14 +183,20 @@ def list_files_and_directories(path,username):
                         <!--<a href="{d_entry_path}" style="color: gold;">{entry}</a>-->
                         {entry}
                         <button class="downloadButton"><a href="{d_entry_path}">Download</a></button>
-                        <button class="deleteButton"><a href="/delete?path={delete_path}">Delete</a></button>
+                        <button class="deleteButton" onclick="document.getElementById(\'{d_entry_path}\').style.display = \'block\';">Delete</button>
+                        <form action="/delete?path={delete_path}" method="POST" style="display: none;" id="{d_entry_path}">
+                            <button class="deleteButton" type="submit">I confirm to delete {entry}</button>
+                        </form>
                     </p>''')
             elif os.path.isdir(entry_path):
                 files_and_dirs.append(f'''
                     <p class="dir" onclick="toggleFolder(\'{entry}\')" id="{entry}">
                         {entry}
                         <button class="uploadButton"><a href="/upload?path={d_entry_path[1:]}">Upload</a></button>
-                        <button class="deleteButton"><a href="/delete?path={d_entry_path[1:]}">Delete</a></button>  
+                        <button class="deleteButton" onclick="document.getElementById(\'{d_entry_path[1:]}\').style.display = \'block\';">Delete</button>
+                        <form action="/delete?path={d_entry_path[1:]}" method="POST" style="display: none;" id="{d_entry_path[1:]}">
+                            <button class="deleteButton" type="submit">I confirm to delete {entry}</button>  
+                        </form>
                     </p>
                 ''')
                 nested_entries = list_files_and_directories(entry_path,username)
@@ -541,6 +548,48 @@ def handle_request(client_socket):
             client_socket.sendall(response_data.encode('utf-8'))
             client_socket.close()
             return
+    elif raw_path.startswith('/upload'):
+        # Method not allowed
+        response_data = 'HTTP/1.1 405 Method Not Allowed\r\n\r\n'
+    elif raw_path.startswith('/delete') and method == 'POST':
+        if cookie_header and username_from_cookie:
+            tmp = query_params['path']
+            print(tmp.split('/')[0])
+            if tmp.split('/')[1] != username_from_cookie:
+                # return 403
+                with open('403.html','r') as file:
+                    page = file.read()
+                    page = page.replace('insert_username',f'{username_from_cookie}')
+                    page = page.replace('error_message','You are not allowed to delete this file.')
+                    response_data = 'HTTP/1.1 403 Forbidden\r\n\r\n' + page
+                    client_socket.sendall(response_data.encode('utf-8'))
+                    client_socket.close()
+                    return
+            try:
+                if os.path.isfile(f'./data/{tmp}'):
+                    os.remove(f'./data/{tmp}')
+                elif os.path.isdir(f'./data/{tmp}'):
+                    shutil.rmtree(f'./data/{tmp}')
+            except FileNotFoundError or OSError:
+                with open('404.html','r') as file:
+                    page = file.read()
+                    page = page.replace('insert_username',f'{username_from_cookie}')
+                    response_data = 'HTTP/1.1 404 Not Found\r\n\r\n' + page
+                    client_socket.sendall(response_data.encode('utf-8'))
+                    client_socket.close()
+                    return
+            response_data = f'HTTP/1.1 302 Found\r\nLocation: /index\r\n\r\n'
+            client_socket.sendall(response_data.encode('utf-8'))
+            client_socket.close()
+            return
+        else:
+            response_data = 'HTTP/1.1 302 Found\r\nLocation: /login\r\n\r\n'
+            client_socket.sendall(response_data.encode('utf-8'))
+            client_socket.close()
+            return
+    elif raw_path.startswith('/delete'):
+        # Method not allowed
+        response_data = 'HTTP/1.1 405 Method Not Allowed\r\n\r\n'
     elif path.startswith('/data'):
         # first check if authorized
         if cookie_header and username_from_cookie:
