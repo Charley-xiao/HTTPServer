@@ -333,6 +333,10 @@ def handle_request(client_socket):
 
     if 'path' in query_params:
         upload_path = query_params['path']
+        if upload_path[0] != '/':
+            query_params['path'] = '/' + upload_path
+        if upload_path[-1] == '/':
+            query_params['path'] = query_params['path'][:-1]
         print(f'Query parameter path: {upload_path}')
 
     if raw_path == '/favicon.svg':
@@ -552,7 +556,7 @@ def handle_request(client_socket):
             print(f'Content length: {content_length}')
             request_body = client_socket.recv(content_length).decode('utf-8')
             print(f'Request body: {request_body}')
-            file_name = ''.join(request_lines).split('filename="')[1].split('"')[0]
+            file_name = request_body.split('filename="')[1].split('"')[0]
             print(f'File name: {file_name}')
             file_content = request_body.split('\r\n\r\n',1)
             file_content = file_content[1].split('\r\n------')[0]
@@ -613,6 +617,31 @@ def handle_request(client_socket):
     elif raw_path.startswith('/delete'):
         # Method not allowed
         response_data = 'HTTP/1.1 405 Method Not Allowed\r\n\r\n'
+    # elif raw_path.startswith('/chunked'):
+    #     if method != 'GET':
+    #         response_data = 'HTTP/1.1 405 Method Not Allowed\r\n\r\n'
+    #     else:
+    #         # Open the file for reading in binary mode
+    #         file_path = './data/' + query_params['path']
+    #         try:
+    #             with open(file_path, 'rb') as file:
+    #                 # Send the HTTP headers with Transfer-Encoding: chunked
+    #                 client_socket.sendall(b'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Type: application/octet-stream\r\n\r\n')
+
+    #                 # Read the file in chunks and send them using chunked encoding
+    #                 chunk_size = 1024  # Set your desired chunk size
+    #                 while True:
+    #                     chunk = file.read(chunk_size)
+    #                     if not chunk:
+    #                         break
+    #                     chunk_size_hex = hex(len(chunk))[2:].encode('utf-8')
+    #                     client_socket.sendall(chunk_size_hex + b'\r\n' + chunk + b'\r\n')
+
+    #                 # Send the final chunk with size 0 to signal the end
+    #                 client_socket.sendall(b'0\r\n\r\n')
+    #         except FileNotFoundError:
+    #             # Handle file not found
+    #             response_data = 'HTTP/1.1 404 Not Found\r\n\r\nFile not found'
     elif path.startswith('/data'):
         # first check if authorized
         if cookie_header and username_from_cookie or auth_header and auth_header.startswith('Basic ') and check_authorization(username,password):
