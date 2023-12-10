@@ -674,10 +674,15 @@ def handle_request(client_socket):
     else:
         response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nWWW-Authenticate: Basic realm="Authorization required"'
 
-    print(f'Response data: {response_data}')
-    client_socket.sendall(response_data.encode('utf-8'))
-    # if connection_header and connection_header == 'close':
-    client_socket.close()
+    try:
+        print(f'Response data: {response_data}')
+        client_socket.sendall(response_data.encode('utf-8'))
+        # if connection_header and connection_header == 'close':
+        client_socket.close()
+    except BrokenPipeError:
+        print('Broken pipe')
+    except OSError:
+        pass
 
 def run_server(host, port, num_workers):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
