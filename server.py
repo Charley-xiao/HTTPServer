@@ -473,6 +473,34 @@ def handle_request(client_socket):
             response_data = f'HTTP/1.1 200 OK\r\n\r\n\r\n'
         else:
             response_data = f'HTTP/1.1 401 Unauthorized\r\n\r\n'
+    elif range_header:
+        if method != 'GET':
+            response_data = 'HTTP/1.1 400 Bad Request\r\n\r\nInvalid request method'
+        if cookie_header and username_from_cookie or auth_header and auth_header.startswith(
+                'Basic ') and check_authorization(username, password):
+            try:
+                range_start, range_end = map(int, range_header[len('bytes='):].split('-'))
+            except ValueError:
+                response_data = 'HTTP/1.1 400 Bad Request\r\n\r\nInvalid Range header'
+                client_socket.sendall(response_data.encode('utf-8'))
+                # if connection_header and connection_header == 'close':
+                client_socket.close()
+                return
+
+            request_file_path = path[1:]
+            file_size = os.path.getsize(request_file_path)
+
+            if 0 <= range_start < file_size and range_start <= range_end < file_size:
+                with open(request_file_path, 'rb') as file:
+                    file.seek(range_start)
+                    content = file.read(range_end - range_start + 1)
+                    response_data = f'HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {range_start}-{range_end}/{file_size}\r\n\r\n'
+                    client_socket.sendall(response_data.encode('utf-8') + content)
+                    # if connection_header and connection_header == 'close':
+                    client_socket.close()
+                    return
+            else:
+                response_data = 'HTTP/1.1 416 Range Not Satisfiable\r\n\r\n'
     elif test_param and test_param.startswith('1'):  # List the files and directories
         print(f'Listing files and directories in ./data/{username}')
         response_data = (f'HTTP/1.1 200 OK{determine_cookie(need_to_set_cookie)}\r\n\r\n' +
