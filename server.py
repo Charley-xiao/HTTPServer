@@ -13,6 +13,7 @@ import shutil
 session_storage = {}
 DATABASE_FILE = 'users.db'
 
+
 def initialize_database():
     conn = sqlite3.connect(DATABASE_FILE)
     cursor = conn.cursor()
@@ -25,11 +26,14 @@ def initialize_database():
         )
     ''')
 
-    cursor.execute('INSERT OR REPLACE INTO users (username, password, email) VALUES (?, ?, ?)', ('admin', 'admin','admin@mail.sustech.edu.cn'))
-    cursor.execute('INSERT OR REPLACE INTO users (username, password, email) VALUES (?, ?, ?)', ('client1', '123','client1@google.com'))
+    cursor.execute('INSERT OR REPLACE INTO users (username, password, email) VALUES (?, ?, ?)',
+                   ('admin', 'admin', 'admin@mail.sustech.edu.cn'))
+    cursor.execute('INSERT OR REPLACE INTO users (username, password, email) VALUES (?, ?, ?)',
+                   ('client1', '123', 'client1@google.com'))
 
     conn.commit()
     conn.close()
+
 
 def generate_session_id(username):
     timestamp = str(datetime.datetime.now())
@@ -37,13 +41,15 @@ def generate_session_id(username):
     session_id = hashlib.sha256(data.encode('utf-8')).hexdigest()
     return session_id
 
+
 def set_cookie_header(username, expiration_days=7):
     session_id = generate_session_id(username)
     print(f'Session ID generated from {username}: {session_id}')
     expiration_date = datetime.datetime.now() + datetime.timedelta(days=expiration_days)
     formatted_expiration_date = expiration_date.strftime("%a, %d-%b-%Y %H:%M:%S GMT")
-    session_storage[session_id] = username 
+    session_storage[session_id] = username
     return f'Set-Cookie: session-id={session_id}; Expires={formatted_expiration_date}; Path=/; HttpOnly\r\n'
+
 
 def get_username_from_cookie(cookie):
     cookie_parts = cookie.split(';')
@@ -56,6 +62,7 @@ def get_username_from_cookie(cookie):
     print(f'Session storage: {session_storage}')
     return session_storage.get(session_id, None)
 
+
 def check_authorization(username, password):
     conn = sqlite3.connect(DATABASE_FILE)
     cursor = conn.cursor()
@@ -63,10 +70,12 @@ def check_authorization(username, password):
     user = cursor.fetchone()
     conn.close()
     return user is not None
-    
+
+
 def get_content_type(file_path):
     mime, encoding = mimetypes.guess_type(file_path)
     return mime if mime else 'application/octet-stream'
+
 
 def handle_file_request(client_socket, path, auth_header):
     # Check if the client is authorized
@@ -102,7 +111,8 @@ def handle_file_request(client_socket, path, auth_header):
                     preview_page = preview.read()
                     preview_page = preview_page.replace('insert_filename', f'{os.path.basename(file_path)}')
                     preview_page = preview_page.replace('insert_file_content', f'{open(file_path, "r").read()}')
-                    preview_page = preview_page.replace('<a>Download</a>', f'<a href="{path}?p=1" download>Download {os.path.basename(file_path)}</a>')
+                    preview_page = preview_page.replace('<a>Download</a>',
+                                                        f'<a href="{path}?p=1" download>Download {os.path.basename(file_path)}</a>')
                     response_data = f'HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {len(preview_page)}\r\n\r\n{preview_page}'
                     client_socket.sendall(response_data.encode('utf-8'))
                     client_socket.close()
@@ -111,9 +121,11 @@ def handle_file_request(client_socket, path, auth_header):
                 with open('preview.html', 'r') as preview:
                     preview_page = preview.read()
                     preview_page = preview_page.replace('insert_filename', f'{os.path.basename(file_path)}')
-                    preview_page = preview_page.replace('<h4>File Details:</h4>', '<h2>This file cannot be previewed.</h2>')
-                    preview_page = preview_page.replace('<div class="file-preview">insert_file_content</div>','')
-                    preview_page = preview_page.replace('<a>Download</a>', f'<a href="{path}?p=1" download>Download {os.path.basename(file_path)}</a>')
+                    preview_page = preview_page.replace('<h4>File Details:</h4>',
+                                                        '<h2>This file cannot be previewed.</h2>')
+                    preview_page = preview_page.replace('<div class="file-preview">insert_file_content</div>', '')
+                    preview_page = preview_page.replace('<a>Download</a>',
+                                                        f'<a href="{path}?p=1" download>Download {os.path.basename(file_path)}</a>')
                     response_data = f'HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {len(preview_page)}\r\n\r\n{preview_page}'
                     client_socket.sendall(response_data.encode('utf-8'))
                     client_socket.close()
@@ -141,8 +153,9 @@ def handle_file_request(client_socket, path, auth_header):
         # Handle file not found
         response_data = 'HTTP/1.1 404 Not Found\r\n\r\nFile not found'
         client_socket.sendall(response_data.encode('utf-8'))
-    
+
     client_socket.close()
+
 
 def worker(queue):
     while True:
@@ -150,6 +163,7 @@ def worker(queue):
         if client_socket is None:
             break  # Signal to exit the thread pool
         handle_request(client_socket)
+
 
 def parse_url(raw_path):
     if "://" in raw_path:
@@ -169,13 +183,14 @@ def parse_url(raw_path):
 
     return path, query_params
 
-def list_files_and_directories(path,username):
+
+def list_files_and_directories(path, username):
     files_and_dirs = []
     try:
         for entry in os.listdir(path):
             entry_path = os.path.join(path, entry)
-            d_entry_path = entry_path.replace(f'/data','')
-            d_entry_path = d_entry_path.replace('\\','/')
+            d_entry_path = entry_path.replace(f'/data', '')
+            d_entry_path = d_entry_path.replace('\\', '/')
             delete_path = d_entry_path[1:]
             if os.path.isfile(entry_path):
                 files_and_dirs.append(f'''
@@ -199,36 +214,39 @@ def list_files_and_directories(path,username):
                         </form>
                     </p>
                 ''')
-                nested_entries = list_files_and_directories(entry_path,username)
+                nested_entries = list_files_and_directories(entry_path, username)
                 files_and_dirs.append(f'<div class="nested" id="nested_{entry}">{"".join(nested_entries)}</div>')
         return ''.join(files_and_dirs)
     except FileNotFoundError:
         return ''
 
-def list_files_and_directories_plain(path,username):
+
+def list_files_and_directories_plain(path, username):
     files_and_dirs = []
     try:
         for entry in os.listdir(path):
             entry_path = os.path.join(path, entry)
-            d_entry_path = entry_path.replace(f'/data','')
-            d_entry_path = d_entry_path.replace('\\','/')
+            d_entry_path = entry_path.replace(f'/data', '')
+            d_entry_path = d_entry_path.replace('\\', '/')
             delete_path = d_entry_path[1:]
             if os.path.isfile(entry_path):
                 files_and_dirs.append(f'{entry}')
             elif os.path.isdir(entry_path):
                 files_and_dirs.append(f'{entry}')
-                nested_entries = list_files_and_directories_plain(entry_path,username)
+                nested_entries = list_files_and_directories_plain(entry_path, username)
                 files_and_dirs.append(f'{"".join(nested_entries)}')
         return ','.join(files_and_dirs)
     except FileNotFoundError:
         return ''
-    
+
+
 def return_index_page(username):
     with open('index.html', 'r') as file:
         index_page = file.read()
-        index_page = index_page.replace('insert_username',f'{username}')
-        index_page = index_page.replace('<p class="file">1</p>',list_files_and_directories(f'./data/{username}',username))
-        index_page = index_page.replace('<script></script>','''<script>
+        index_page = index_page.replace('insert_username', f'{username}')
+        index_page = index_page.replace('<p class="file">1</p>',
+                                        list_files_and_directories(f'./data/{username}', username))
+        index_page = index_page.replace('<script></script>', '''<script>
             function toggleFolder(folderId){
                 var x = document.getElementById(\'nested_\' + folderId);
                 if (x.style.display === "none" || x.style.display === \"\") {
@@ -241,6 +259,7 @@ def return_index_page(username):
             </script>
         ''')
         return index_page
+
 
 def handle_registration(client_socket, request_lines):
     content_length = None
@@ -265,7 +284,8 @@ def handle_registration(client_socket, request_lines):
         conn.close()
         with open('login.html', 'r') as file:
             login_page = file.read()
-            login_page = login_page.replace('<input type="submit" value="Login">', '<p style="color:green">Registration successful</p><input type="submit" value="Login">')
+            login_page = login_page.replace('<input type="submit" value="Login">',
+                                            '<p style="color:green">Registration successful</p><input type="submit" value="Login">')
             response_data = 'HTTP/1.1 200 OK\r\n\r\n' + login_page
         client_socket.sendall(response_data.encode('utf-8'))
         # if connection_header and connection_header == 'close':
@@ -277,24 +297,27 @@ def handle_registration(client_socket, request_lines):
         conn.close()
         with open('register.html', 'r') as file:
             register_page = file.read()
-            register_page = register_page.replace('<input type="submit" value="Register">', '<p style="color:red">Username already taken</p><input type="submit" value="Register">')
+            register_page = register_page.replace('<input type="submit" value="Register">',
+                                                  '<p style="color:red">Username already taken</p><input type="submit" value="Register">')
             response_data = 'HTTP/1.1 200 OK\r\n\r\n' + register_page
         client_socket.sendall(response_data.encode('utf-8'))
         # if connection_header and connection_header == 'close':
         client_socket.close()
         return
-    
+
+
 def determine_cookie(need_to_set_cookie):
     if need_to_set_cookie:
         return '\r\n' + need_to_set_cookie
     else:
         return '\r\n'
 
+
 def handle_request(client_socket):
     request_data = client_socket.recv(1024).decode('utf-8')
     if not request_data:
         return
-    
+
     request_lines = request_data.split('\r\n')
     print(f'Request lines: {request_lines}')
     method, raw_path, _ = request_lines[0].split()
@@ -302,7 +325,7 @@ def handle_request(client_socket):
 
     path, query_params = parse_url(raw_path)
     print(f'Parsed path: {path}\nQuery parameters: {query_params}')
-    
+
     auth_header = None
     for line in request_lines:
         if line.startswith('Authorization: '):
@@ -363,7 +386,7 @@ def handle_request(client_socket):
         username, password = decoded_credentials.split(':')
         print(f'Username: {username}\nPassword: {password}')
 
-        if not check_authorization(username,password):
+        if not check_authorization(username, password):
             response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nInvalid username or password'
             client_socket.sendall(response_data.encode('utf-8'))
             return
@@ -410,7 +433,7 @@ def handle_request(client_socket):
         #                 return
         #         else:
         #             response_data = 'HTTP/1.1 416 Range Not Satisfiable\r\n\r\n'
-                    
+
         #     if method == 'GET':
         #         print('GET')
         #         if test_param and test_param.startswith('1'): # List the files and directories
@@ -439,20 +462,22 @@ def handle_request(client_socket):
         #         response_data = f'HTTP/1.1 200 OK\r\n\r\n'
         #     else:
         #         response_data = 'HTTP/1.1 400 Bad Request\r\n\r\nInvalid request method'
-            
+
         # else:
         #     print('Unauthorized')
         #     response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nInvalid username or password'
-    
+
     if method == 'HEAD':
-        if cookie_header and username_from_cookie or auth_header and auth_header.startswith('Basic ') and check_authorization(username,password):
+        if cookie_header and username_from_cookie or auth_header and auth_header.startswith(
+                'Basic ') and check_authorization(username, password):
             response_data = f'HTTP/1.1 200 OK\r\n\r\n\r\n'
         else:
             response_data = f'HTTP/1.1 401 Unauthorized\r\n\r\n'
-    elif test_param and test_param.startswith('1'): # List the files and directories
+    elif test_param and test_param.startswith('1'):  # List the files and directories
         print(f'Listing files and directories in ./data/{username}')
-        response_data = f'HTTP/1.1 200 OK{determine_cookie(need_to_set_cookie)}\r\n\r\n' + list_files_and_directories_plain(f'./data/{username}',username)
-    elif test_param and test_param.startswith('0'): # Return the index page
+        response_data = (f'HTTP/1.1 200 OK{determine_cookie(need_to_set_cookie)}\r\n\r\n' +
+                         list_files_and_directories_plain(f'./data/{username}', username))
+    elif test_param and test_param.startswith('0'):  # Return the index page
         print('Returning index page')
         index_page = return_index_page(username)
         response_data = f'HTTP/1.1 200 OK{determine_cookie(need_to_set_cookie)}\r\n\r\n{index_page}'
@@ -484,7 +509,7 @@ def handle_request(client_socket):
         username = username.split('=')[1]
         password = password.split('=')[1]
         print(f'Username: {username}\nPassword: {password}')
-        if check_authorization(username,password):
+        if check_authorization(username, password):
             print('Authorized')
             if cookie_header and username_from_cookie:
                 print(f'User from cookie: {username_from_cookie}')
@@ -500,7 +525,8 @@ def handle_request(client_socket):
             print('Unauthorized')
             with open('login.html', 'r') as file:
                 login_page = file.read()
-                login_page = login_page.replace('<input type="submit" value="Login">', '<p style="color:red">Invalid username or password</p><input type="submit" value="Login">')
+                login_page = login_page.replace('<input type="submit" value="Login">',
+                                                '<p style="color:red">Invalid username or password</p><input type="submit" value="Login">')
                 response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\n' + login_page
             client_socket.sendall(response_data.encode('utf-8'))
             # if connection_header and connection_header == 'close':
@@ -542,9 +568,9 @@ def handle_request(client_socket):
         if cookie_header and username_from_cookie:
             with open('upload.html', 'r') as file:
                 upload_page = file.read()
-                upload_page = upload_page.replace('insert_username',f'{username_from_cookie}')
+                upload_page = upload_page.replace('insert_username', f'{username_from_cookie}')
                 tmp = query_params['path']
-                upload_page = upload_page.replace('insert_path',f'{tmp}')
+                upload_page = upload_page.replace('insert_path', f'{tmp}')
                 response_data = 'HTTP/1.1 200 OK\r\n\r\n' + upload_page
             client_socket.sendall(response_data.encode('utf-8'))
             # if connection_header and connection_header == 'close':
@@ -567,13 +593,13 @@ def handle_request(client_socket):
             print(f'Request body: {request_body}')
             file_name = request_body.split('filename="')[1].split('"')[0]
             print(f'File name: {file_name}')
-            file_content = request_body.split('\r\n\r\n',1)
+            file_content = request_body.split('\r\n\r\n', 1)
             file_content = file_content[1].split('\r\n------')[0]
             print(f'File content: {file_content}')
             tmp = query_params['path']
             # convert file_content to bytes-like object
             file_content = file_content.encode('utf-8')
-            with open(f'./data/{tmp}/{file_name}','wb') as file:
+            with open(f'./data/{tmp}/{file_name}', 'wb') as file:
                 file.write(file_content)
             response_data = f'HTTP/1.1 302 Found\r\nLocation: /index\r\n\r\n'
             client_socket.sendall(response_data.encode('utf-8'))
@@ -593,10 +619,10 @@ def handle_request(client_socket):
             print(tmp.split('/')[0])
             if tmp.split('/')[1] != username_from_cookie:
                 # return 403
-                with open('403.html','r') as file:
+                with open('403.html', 'r') as file:
                     page = file.read()
-                    page = page.replace('insert_username',f'{username_from_cookie}')
-                    page = page.replace('error_message','You are not allowed to delete this file.')
+                    page = page.replace('insert_username', f'{username_from_cookie}')
+                    page = page.replace('error_message', 'You are not allowed to delete this file.')
                     response_data = 'HTTP/1.1 403 Forbidden\r\n\r\n' + page
                     client_socket.sendall(response_data.encode('utf-8'))
                     client_socket.close()
@@ -607,9 +633,9 @@ def handle_request(client_socket):
                 elif os.path.isdir(f'./data/{tmp}'):
                     shutil.rmtree(f'./data/{tmp}')
             except FileNotFoundError or OSError:
-                with open('404.html','r') as file:
+                with open('404.html', 'r') as file:
                     page = file.read()
-                    page = page.replace('insert_username',f'{username_from_cookie}')
+                    page = page.replace('insert_username', f'{username_from_cookie}')
                     response_data = 'HTTP/1.1 404 Not Found\r\n\r\n' + page
                     client_socket.sendall(response_data.encode('utf-8'))
                     client_socket.close()
@@ -626,40 +652,47 @@ def handle_request(client_socket):
     elif raw_path.startswith('/delete'):
         # Method not allowed
         response_data = 'HTTP/1.1 405 Method Not Allowed\r\n\r\n'
-    # elif raw_path.startswith('/chunked'):
-    #     if method != 'GET':
-    #         response_data = 'HTTP/1.1 405 Method Not Allowed\r\n\r\n'
-    #     else:
-    #         # Open the file for reading in binary mode
-    #         file_path = './data/' + query_params['path']
-    #         try:
-    #             with open(file_path, 'rb') as file:
-    #                 # Send the HTTP headers with Transfer-Encoding: chunked
-    #                 client_socket.sendall(b'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Type: application/octet-stream\r\n\r\n')
+    elif query_params and 'chunked' in query_params and query_params['chunked'] == '1':
+        if method != 'GET':
+            response_data = 'HTTP/1.1 405 Method Not Allowed\r\n\r\n'
+        else:
+            # Open the file for reading in binary mode
+            file_path = '.' + path
+            try:
+                with open(file_path, 'rb') as file:
+                    # Send the HTTP headers with Transfer-Encoding: chunked
+                    client_socket.sendall(b'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n'
+                                          b'Content-Type: application/octet-stream\r\n\r\n')
+                    print('Sent headers')
 
-    #                 # Read the file in chunks and send them using chunked encoding
-    #                 chunk_size = 1024  # Set your desired chunk size
-    #                 while True:
-    #                     chunk = file.read(chunk_size)
-    #                     if not chunk:
-    #                         break
-    #                     chunk_size_hex = hex(len(chunk))[2:].encode('utf-8')
-    #                     client_socket.sendall(chunk_size_hex + b'\r\n' + chunk + b'\r\n')
+                    # Read the file in chunks and send them using chunked encoding
+                    chunk_size = 5  # Set your desired chunk size
+                    while True:
+                        chunk = file.read(chunk_size)
+                        if not chunk:
+                            break
+                        chunk_size_hex = hex(len(chunk))[2:].encode('utf-8')
+                        client_socket.sendall(chunk_size_hex + b'\r\n' + chunk + b'\r\n')
+                        print(f'Sent chunk of size {len(chunk)}')
 
-    #                 # Send the final chunk with size 0 to signal the end
-    #                 client_socket.sendall(b'0\r\n\r\n')
-    #         except FileNotFoundError:
-    #             # Handle file not found
-    #             response_data = 'HTTP/1.1 404 Not Found\r\n\r\nFile not found'
+                    # Send the final chunk with size 0 to signal the end
+                    client_socket.sendall(b'0\r\n\r\n')
+                    print('Sent final chunk')
+                    client_socket.close()
+                    return
+            except FileNotFoundError:
+                # Handle file not found
+                response_data = 'HTTP/1.1 404 Not Found\r\n\r\nFile not found'
     elif path.startswith('/data'):
         # first check if authorized
-        if cookie_header and username_from_cookie or auth_header and auth_header.startswith('Basic ') and check_authorization(username,password):
+        if cookie_header and username_from_cookie or auth_header and auth_header.startswith(
+                'Basic ') and check_authorization(username, password):
             # TODO: check if the users match, otherwise return 403
             if raw_path == '/':
                 print('Returning index page')
                 index_page = return_index_page(username_from_cookie)
                 print('Returned')
-                response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
+                response_data = f'HTTP/1.1 200 OK{determine_cookie(need_to_set_cookie)}\r\n\r\n{index_page}'
                 client_socket.sendall(response_data.encode('utf-8'))
                 # if connection_header and connection_header == 'close':
                 client_socket.close()
@@ -675,11 +708,11 @@ def handle_request(client_socket):
             response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
         else:
             # Have logged in but tried to access a page that doesn't exist
-            with open('404.html','r') as file:
+            with open('404.html', 'r') as file:
                 page = file.read()
-                page = page.replace('insert_username',f'{username_from_cookie}')
+                page = page.replace('insert_username', f'{username_from_cookie}')
                 response_data = 'HTTP/1.1 404 Not Found\r\n\r\n' + page
-    
+
     else:
         response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nWWW-Authenticate: Basic realm="Authorization required"'
 
@@ -692,6 +725,7 @@ def handle_request(client_socket):
         print('Broken pipe')
     except OSError:
         pass
+
 
 def run_server(host, port, num_workers):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -724,6 +758,7 @@ def run_server(host, port, num_workers):
     #     client_handler = Thread(target=handle_request, args=(client_socket,))
     #     client_handler.start()
 
+
 def main():
     parser = argparse.ArgumentParser(description='Simple HTTP Server with Authorization')
     parser.add_argument('-i', '--host', default='localhost', help='Server host')
@@ -733,6 +768,7 @@ def main():
 
     initialize_database()
     run_server(args.host, args.port, args.workers)
+
 
 if __name__ == '__main__':
     main()
