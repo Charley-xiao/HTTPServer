@@ -92,7 +92,7 @@ def handle_file_request(client_socket, path, auth_header):
     #     response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nInvalid username or password'
     #     client_socket.sendall(response_data.encode('utf-8'))
     #     return
-    preview_disabled = path.split('?p=')[1] if '?p=' in path else 0
+    preview_disabled = int(path.split('?p=')[1])^1 if '?p=' in path else 1
     path = path.split('?p=')[0]
     file_path = f'./data{path}'
     print(file_path)
@@ -112,7 +112,7 @@ def handle_file_request(client_socket, path, auth_header):
                     preview_page = preview_page.replace('insert_filename', f'{os.path.basename(file_path)}')
                     preview_page = preview_page.replace('insert_file_content', f'{open(file_path, "r").read()}')
                     preview_page = preview_page.replace('<a>Download</a>',
-                                                        f'<a href="{path}?p=1" download>Download {os.path.basename(file_path)}</a>')
+                                                        f'<a href="{path}" download>Download {os.path.basename(file_path)}</a>')
                     response_data = f'HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {len(preview_page)}\r\n\r\n{preview_page}'
                     client_socket.sendall(response_data.encode('utf-8'))
                     client_socket.close()
@@ -125,7 +125,7 @@ def handle_file_request(client_socket, path, auth_header):
                                                         '<h2>This file cannot be previewed.</h2>')
                     preview_page = preview_page.replace('<div class="file-preview">insert_file_content</div>', '')
                     preview_page = preview_page.replace('<a>Download</a>',
-                                                        f'<a href="{path}?p=1" download>Download {os.path.basename(file_path)}</a>')
+                                                        f'<a href="{path}" download>Download {os.path.basename(file_path)}</a>')
                     response_data = f'HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {len(preview_page)}\r\n\r\n{preview_page}'
                     client_socket.sendall(response_data.encode('utf-8'))
                     client_socket.close()
@@ -197,7 +197,7 @@ def list_files_and_directories(path, username):
                     <p class="file">
                         <!--<a href="{d_entry_path}" style="color: gold;">{entry}</a>-->
                         {entry}
-                        <button class="downloadButton"><a href="{d_entry_path}">Download</a></button>
+                        <button class="downloadButton"><a href="{d_entry_path}?p=1">Download</a></button>
                         <button class="deleteButton" onclick="document.getElementById(\'{d_entry_path}\').style.display = \'block\';">Delete</button>
                         <form action="/delete?path={delete_path}" method="POST" style="display: none;" id="{d_entry_path}">
                             <button class="deleteButton" type="submit">I confirm to delete {entry}</button>
