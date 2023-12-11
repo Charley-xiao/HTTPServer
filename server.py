@@ -283,6 +283,12 @@ def handle_registration(client_socket, request_lines):
         # if connection_header and connection_header == 'close':
         client_socket.close()
         return
+    
+def determine_cookie(need_to_set_cookie):
+    if need_to_set_cookie:
+        return '\r\n' + need_to_set_cookie
+    else:
+        return '\r\n'
 
 def handle_request(client_socket):
     request_data = client_socket.recv(1024).decode('utf-8')
@@ -339,6 +345,8 @@ def handle_request(client_socket):
             query_params['path'] = query_params['path'][:-1]
         print(f'Query parameter path: {upload_path}')
 
+    need_to_set_cookie = None
+
     if raw_path == '/favicon.svg':
         with open('favicon.svg', 'rb') as file:
             file_content = file.read()
@@ -361,10 +369,11 @@ def handle_request(client_socket):
             return
         if not cookie_header or not username_from_cookie:
             print('Setting new session ID in cookie')
-            response_data = f'HTTP/1.1 200 OK\r\n{set_cookie_header(username)}\r\n\r\nHello, {username}!'
-            client_socket.sendall(response_data.encode('utf-8'))
-            client_socket.close()
-            return
+            need_to_set_cookie = set_cookie_header(username)
+            # response_data = f'HTTP/1.1 200 OK\r\n{set_cookie_header(username)}\r\n\r\nHello, {username}!'
+            # client_socket.sendall(response_data.encode('utf-8'))
+            # client_socket.close()
+            # return
         # if check_authorization(username,password):
         #     print('Authorized')
         #     if cookie_header and username_from_cookie:
@@ -437,16 +446,16 @@ def handle_request(client_socket):
     
     if method == 'HEAD':
         if cookie_header and username_from_cookie or auth_header and auth_header.startswith('Basic ') and check_authorization(username,password):
-            response_data = f'HTTP/1.1 200 OK\r\n\r\n'
+            response_data = f'HTTP/1.1 200 OK\r\n\r\n\r\n'
         else:
             response_data = f'HTTP/1.1 401 Unauthorized\r\n\r\n'
     elif test_param and test_param.startswith('1'): # List the files and directories
         print(f'Listing files and directories in ./data/{username}')
-        response_data = 'HTTP/1.1 200 OK\r\n\r\n' + list_files_and_directories_plain(f'./data/{username}',username)
+        response_data = f'HTTP/1.1 200 OK{determine_cookie(need_to_set_cookie)}\r\n\r\n' + list_files_and_directories_plain(f'./data/{username}',username)
     elif test_param and test_param.startswith('0'): # Return the index page
         print('Returning index page')
         index_page = return_index_page(username)
-        response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
+        response_data = f'HTTP/1.1 200 OK{determine_cookie(need_to_set_cookie)}\r\n\r\n{index_page}'
     elif raw_path == '/login' and method == 'GET':
         print('cookie_header: ', cookie_header)
         print('username_from_cookie: ', username_from_cookie)
@@ -457,7 +466,7 @@ def handle_request(client_socket):
             # Return the login page
             with open('login.html', 'r') as file:
                 login_page = file.read()
-                response_data = 'HTTP/1.1 200 OK\r\n\r\n' + login_page
+                response_data = f'HTTP/1.1 200 OK{determine_cookie(need_to_set_cookie)}\r\n\r\n{login_page}'
             client_socket.sendall(response_data.encode('utf-8'))
             # if connection_header and connection_header == 'close':
             client_socket.close()
