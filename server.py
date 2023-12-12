@@ -9,6 +9,10 @@ import datetime
 import mimetypes
 import sqlite3
 import shutil
+from Crypto import Random
+from Crypto.PublicKey import RSA
+from Crypto.Cipher import PKCS1_OAEP
+from Crypto.Cipher import Salsa20
 
 session_storage = {}
 DATABASE_FILE = 'users.db'
@@ -92,7 +96,7 @@ def handle_file_request(client_socket, path, auth_header):
     #     response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nInvalid username or password'
     #     client_socket.sendall(response_data.encode('utf-8'))
     #     return
-    preview_disabled = int(path.split('?p=')[1])^1 if '?p=' in path else 1
+    preview_disabled = int(path.split('?p=')[1]) ^ 1 if '?p=' in path else 1
     path = path.split('?p=')[0]
     file_path = f'./data{path}'
     print(file_path)
@@ -112,8 +116,10 @@ def handle_file_request(client_socket, path, auth_header):
                     preview_page = preview_page.replace('insert_filename', f'{os.path.basename(file_path)}')
                     preview_page = preview_page.replace('insert_file_content', f'{open(file_path, "r").read()}')
                     preview_page = preview_page.replace('<a>Download</a>',
-                                                        f'<a href="{path}" download>Download {os.path.basename(file_path)}</a>')
-                    response_data = f'HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {len(preview_page)}\r\n\r\n{preview_page}'
+                                                        f'<a href="{path}" download>'
+                                                        f'Download {os.path.basename(file_path)}</a>')
+                    response_data = (f'HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n'
+                                     f'Content-Length: {len(preview_page)}\r\n\r\n{preview_page}')
                     client_socket.sendall(response_data.encode('utf-8'))
                     client_socket.close()
                 return
@@ -125,8 +131,10 @@ def handle_file_request(client_socket, path, auth_header):
                                                         '<h2>This file cannot be previewed.</h2>')
                     preview_page = preview_page.replace('<div class="file-preview">insert_file_content</div>', '')
                     preview_page = preview_page.replace('<a>Download</a>',
-                                                        f'<a href="{path}" download>Download {os.path.basename(file_path)}</a>')
-                    response_data = f'HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {len(preview_page)}\r\n\r\n{preview_page}'
+                                                        f'<a href="{path}" download>'
+                                                        f'Download {os.path.basename(file_path)}</a>')
+                    response_data = (f'HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n'
+                                     f'Content-Length: {len(preview_page)}\r\n\r\n{preview_page}')
                     client_socket.sendall(response_data.encode('utf-8'))
                     client_socket.close()
                 return
@@ -138,7 +146,8 @@ def handle_file_request(client_socket, path, auth_header):
                     content_type = get_content_type(file_path)
                     print(f'Content type: {content_type}')
 
-                    response_data = f'HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {content_length}\r\n\r\n'
+                    response_data = (f'HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\n'
+                                     f'Content-Length: {content_length}\r\n\r\n')
                     client_socket.sendall(response_data.encode('utf-8') + file_content)
                     client_socket.close()
                 return
@@ -147,7 +156,8 @@ def handle_file_request(client_socket, path, auth_header):
             files = os.listdir(file_path)
             files_list = '\n'.join(files)
 
-            response_data = f'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {len(files_list)}\r\n\r\n{files_list}'
+            response_data = (f'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n'
+                             f'Content-Length: {len(files_list)}\r\n\r\n{files_list}')
             client_socket.sendall(response_data.encode('utf-8'))
     else:
         # Handle file not found
@@ -285,7 +295,8 @@ def handle_registration(client_socket, request_lines):
         with open('login.html', 'r') as file:
             login_page = file.read()
             login_page = login_page.replace('<input type="submit" value="Login">',
-                                            '<p style="color:green">Registration successful</p><input type="submit" value="Login">')
+                                            '<p style="color:green">Registration successful</p>'
+                                            '<input type="submit" value="Login">')
             response_data = 'HTTP/1.1 200 OK\r\n\r\n' + login_page
         client_socket.sendall(response_data.encode('utf-8'))
         # if connection_header and connection_header == 'close':
@@ -298,7 +309,8 @@ def handle_registration(client_socket, request_lines):
         with open('register.html', 'r') as file:
             register_page = file.read()
             register_page = register_page.replace('<input type="submit" value="Register">',
-                                                  '<p style="color:red">Username already taken</p><input type="submit" value="Register">')
+                                                  '<p style="color:red">Username already taken</p>'
+                                                  '<input type="submit" value="Register">')
             response_data = 'HTTP/1.1 200 OK\r\n\r\n' + register_page
         client_socket.sendall(response_data.encode('utf-8'))
         # if connection_header and connection_header == 'close':
@@ -355,6 +367,13 @@ def handle_request(client_socket):
     print(f'Cookie header: {cookie_header}')
     username_from_cookie = get_username_from_cookie(cookie_header) if cookie_header else None
 
+    encrypted_key_header = None
+    for line in request_lines:
+        if line.startswith('Encrypted key: '):
+            encrypted_key_header = line[len('Encrypted key: '):].strip()
+            break
+    print(f'Encrypted Key header: {encrypted_key_header}')
+
     test_param = None
     if 'SUSTech-HTTP' in query_params:
         test_param = query_params['SUSTech-HTTP'][0]
@@ -376,7 +395,8 @@ def handle_request(client_socket):
             content_length = len(file_content)
             content_type = 'image/svg+xml'
 
-            response_data = f'HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {content_length}\r\n\r\n'
+            response_data = (f'HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\n'
+                             f'Content-Length: {content_length}\r\n\r\n')
             client_socket.sendall(response_data.encode('utf-8') + file_content)
             client_socket.close()
         return
@@ -397,75 +417,148 @@ def handle_request(client_socket):
             # client_socket.sendall(response_data.encode('utf-8'))
             # client_socket.close()
             # return
-        # if check_authorization(username,password):
-        #     print('Authorized')
-        #     if cookie_header and username_from_cookie:
-        #         print(f'User from cookie: {username_from_cookie}')
-        #         response_data = f'HTTP/1.1 200 OK\r\n{set_cookie_header(username_from_cookie)}\r\n\r\nHello, {username_from_cookie}!'
-        #     else:
-        #         # Set a new session ID in the cookie for the user
-        #         print('Setting new session ID in cookie')
-        #         response_data = f'HTTP/1.1 200 OK\r\n{set_cookie_header(username)}\r\n\r\nHello, {username}!'
-        #         client_socket.sendall(response_data.encode('utf-8'))
-        #         client_socket.close()
 
-        #     if range_header and method == 'GET': # TODO: support multirange requests
-        #         try:
-        #             range_start, range_end = map(int, range_header[len('bytes='):].split('-'))
-        #         except ValueError:
-        #             response_data = 'HTTP/1.1 400 Bad Request\r\n\r\nInvalid Range header'
-        #             client_socket.sendall(response_data.encode('utf-8'))
-        #             # if connection_header and connection_header == 'close':
-        #             client_socket.close()
-        #             return
+    if path.split('/')[-1] == 'encrypt':
+        if 'request' in query_params and query_params['request'] == 'public_key':
+            random_generator = Random.new().read
+            rsa = RSA.generate(2048, random_generator)
+            # 生成私钥
+            private_key = rsa.exportKey()
+            print(private_key.decode('utf-8'))
+            # 生成公钥
+            public_key = rsa.publickey().exportKey()
+            print(public_key.decode('utf-8'))
 
-        #         request_file_path = path[1:]
-        #         file_size = os.path.getsize(request_file_path)
+            with open('./data/encryption/server/rsa_private_key.pem', 'wb') as f:
+                f.write(private_key)
 
-        #         if 0 <= range_start < file_size and range_start <= range_end < file_size:
-        #             with open(request_file_path, 'rb') as file:
-        #                 file.seek(range_start)
-        #                 content = file.read(range_end - range_start + 1)
-        #                 response_data = f'HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {range_start}-{range_end}/{file_size}\r\n\r\n'
-        #                 client_socket.sendall(response_data.encode('utf-8') + content)
-        #                 # if connection_header and connection_header == 'close':
-        #                 client_socket.close()
-        #                 return
-        #         else:
-        #             response_data = 'HTTP/1.1 416 Range Not Satisfiable\r\n\r\n'
+            with open('./data/encryption/server/rsa_public_key.pem', 'wb') as f:
+                f.write(public_key)
 
-        #     if method == 'GET':
-        #         print('GET')
-        #         if test_param and test_param.startswith('1'): # List the files and directories
-        #             print(f'Listing files and directories in ./data/{username}')
-        #             response_data = 'HTTP/1.1 200 OK\r\n\r\n' + list_files_and_directories_plain(f'./data/{username}',username)
-        #         elif test_param and test_param.startswith('0'): # Return the index page
-        #             print('Returning index page')
-        #             index_page = return_index_page(username)
-        #             response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
-        #         elif raw_path == '/':
-        #             print('Returning index page')
-        #             index_page = return_index_page(username)
-        #             response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
-        #         else:
-        #             handle_file_request(client_socket, f'/{username}{raw_path}', auth_header)
-        #             return
-        #     elif method == 'POST':
-        #         content_length = None
-        #         for line in request_lines:
-        #             if 'Content-Length' in line:
-        #                 content_length = int(line.split(': ')[1])
-        #                 break
-        #         request_body = client_socket.recv(content_length).decode('utf-8')
-        #         response_data = f'HTTP/1.1 200 OK\r\n\r\nReceived POST data: {request_body}'
-        #     elif method == 'HEAD':
-        #         response_data = f'HTTP/1.1 200 OK\r\n\r\n'
-        #     else:
-        #         response_data = 'HTTP/1.1 400 Bad Request\r\n\r\nInvalid request method'
+            response_data = f'HTTP/1.1 200 OK\r\n\r\n' + public_key.decode('utf-8')
+            print(f'Response data: {response_data}')
+            client_socket.sendall(response_data.encode('utf-8'))
+            client_socket.close()
+            return
+        elif 'response' in query_params and query_params['response'] == 'encrypted':
+            if encrypted_key_header:
+                with open('./data/encryption/server/rsa_private_key.pem', 'rb') as f:
+                    private_key = f.read()
+                decipher = PKCS1_OAEP.new(RSA.importKey(private_key))
+                key = decipher.decrypt(base64.b64decode(encrypted_key_header))
+                print(f'Decrypted key: {key}')
+                with open('data/encryption/server/Salsa20_key.pem', 'wb') as f:
+                    f.write(key)
+                response_data = f'HTTP/1.1 200 OK\r\n\r\n' + 'Key received'
+                print(f'Response data: {response_data}')
+                client_socket.sendall(response_data.encode('utf-8'))
+                client_socket.close()
+                return
+            else:
+                response_data = f'HTTP/1.1 400 Bad Request\r\n\r\n'
+                print(f'Response data: {response_data}')
+                client_socket.sendall(response_data.encode('utf-8'))
+                client_socket.close()
+                return
+        elif 'file' in query_params:
+            encrypt_transmit_file_path = '.' + '/'.join(path.split('/')[:-1]) + '/' + query_params['file']
+            print(f'Encrypt transmit file path: {encrypt_transmit_file_path}')
+            if os.path.exists(encrypt_transmit_file_path):
+                with open(encrypt_transmit_file_path, 'rb') as f:
+                    file_content = f.read()
+                    with open('data/encryption/server/Salsa20_key.pem', 'rb') as f:
+                        key = f.read()
+                    cipher = Salsa20.new(key=key)
+                    cipher_text = cipher.encrypt(file_content)
+                    content_length = len(cipher_text)
+                    content_type = get_content_type(encrypt_transmit_file_path)
+                    print(f'Content type: {content_type}')
 
-        # else:
-        #     print('Unauthorized')
-        #     response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nInvalid username or password'
+                    response_data = (f'HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\n'
+                                     f'Content-Length: {content_length}\r\n\r\n')
+                    client_socket.sendall(response_data.encode('utf-8') + file_content)
+                    print(f'Response data: {response_data}')
+                    print('Successfully encrypted and transmitted file')
+                    client_socket.close()
+                return
+            else:
+                response_data = 'HTTP/1.1 404 Not Found\r\n\r\nFile not found'
+                client_socket.sendall(response_data.encode('utf-8'))
+                client_socket.close()
+                return
+
+                # if check_authorization(username,password):
+    #     print('Authorized')
+    #     if cookie_header and username_from_cookie:
+    #         print(f'User from cookie: {username_from_cookie}')
+    #         response_data = f'HTTP/1.1 200 OK\r\n{set_cookie_header(username_from_cookie)}\r\n\r\n
+    #         f'Hello, {username_from_cookie}!'
+    #     else:
+    #         # Set a new session ID in the cookie for the user
+    #         print('Setting new session ID in cookie')
+    #         response_data = f'HTTP/1.1 200 OK\r\n{set_cookie_header(username)}\r\n\r\nHello, {username}!'
+    #         client_socket.sendall(response_data.encode('utf-8'))
+    #         client_socket.close()
+
+    #     if range_header and method == 'GET': # TODO: support multirange requests
+    #         try:
+    #             range_start, range_end = map(int, range_header[len('bytes='):].split('-'))
+    #         except ValueError:
+    #             response_data = 'HTTP/1.1 400 Bad Request\r\n\r\nInvalid Range header'
+    #             client_socket.sendall(response_data.encode('utf-8'))
+    #             # if connection_header and connection_header == 'close':
+    #             client_socket.close()
+    #             return
+
+    #         request_file_path = path[1:]
+    #         file_size = os.path.getsize(request_file_path)
+
+    #         if 0 <= range_start < file_size and range_start <= range_end < file_size:
+    #             with open(request_file_path, 'rb') as file:
+    #                 file.seek(range_start)
+    #                 content = file.read(range_end - range_start + 1)
+    #                 response_data = f'HTTP/1.1 206 Partial Content\r\n
+    #                 f'Content-Range: bytes {range_start}-{range_end}/{file_size}\r\n\r\n'
+    #                 client_socket.sendall(response_data.encode('utf-8') + content)
+    #                 # if connection_header and connection_header == 'close':
+    #                 client_socket.close()
+    #                 return
+    #         else:
+    #             response_data = 'HTTP/1.1 416 Range Not Satisfiable\r\n\r\n'
+
+    #     if method == 'GET':
+    #         print('GET')
+    #         if test_param and test_param.startswith('1'): # List the files and directories
+    #             print(f'Listing files and directories in ./data/{username}')
+    #             response_data = 'HTTP/1.1 200 OK\r\n\r\n' +
+    #             list_files_and_directories_plain(f'./data/{username}',username)
+    #         elif test_param and test_param.startswith('0'): # Return the index page
+    #             print('Returning index page')
+    #             index_page = return_index_page(username)
+    #             response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
+    #         elif raw_path == '/':
+    #             print('Returning index page')
+    #             index_page = return_index_page(username)
+    #             response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
+    #         else:
+    #             handle_file_request(client_socket, f'/{username}{raw_path}', auth_header)
+    #             return
+    #     elif method == 'POST':
+    #         content_length = None
+    #         for line in request_lines:
+    #             if 'Content-Length' in line:
+    #                 content_length = int(line.split(': ')[1])
+    #                 break
+    #         request_body = client_socket.recv(content_length).decode('utf-8')
+    #         response_data = f'HTTP/1.1 200 OK\r\n\r\nReceived POST data: {request_body}'
+    #     elif method == 'HEAD':
+    #         response_data = f'HTTP/1.1 200 OK\r\n\r\n'
+    #     else:
+    #         response_data = 'HTTP/1.1 400 Bad Request\r\n\r\nInvalid request method'
+
+    # else:
+    #     print('Unauthorized')
+    #     response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nInvalid username or password'
 
     if method == 'HEAD':
         if cookie_header and username_from_cookie or auth_header and auth_header.startswith(
@@ -494,7 +587,8 @@ def handle_request(client_socket):
                 with open(request_file_path, 'rb') as file:
                     file.seek(range_start)
                     content = file.read(range_end - range_start + 1)
-                    response_data = f'HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {range_start}-{range_end}/{file_size}\r\n\r\n'
+                    response_data = (f'HTTP/1.1 206 Partial Content\r\n'
+                                     f'Content-Range: bytes {range_start}-{range_end}/{file_size}\r\n\r\n')
                     client_socket.sendall(response_data.encode('utf-8') + content)
                     # if connection_header and connection_header == 'close':
                     client_socket.close()
@@ -541,7 +635,8 @@ def handle_request(client_socket):
             print('Authorized')
             if cookie_header and username_from_cookie:
                 print(f'User from cookie: {username_from_cookie}')
-                response_data = f'HTTP/1.1 200 OK\r\n{set_cookie_header(username_from_cookie)}\r\n\r\nHello, {username_from_cookie}!'
+                response_data = (f'HTTP/1.1 200 OK\r\n{set_cookie_header(username_from_cookie)}\r\n\r\n'
+                                 f'Hello, {username_from_cookie}!')
             else:
                 # Set a new session ID in the cookie for the user
                 print('Setting new session ID in cookie')
@@ -554,7 +649,8 @@ def handle_request(client_socket):
             with open('login.html', 'r') as file:
                 login_page = file.read()
                 login_page = login_page.replace('<input type="submit" value="Login">',
-                                                '<p style="color:red">Invalid username or password</p><input type="submit" value="Login">')
+                                                '<p style="color:red">Invalid username or password</p>'
+                                                '<input type="submit" value="Login">')
                 response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\n' + login_page
             client_socket.sendall(response_data.encode('utf-8'))
             # if connection_header and connection_header == 'close':
@@ -587,7 +683,8 @@ def handle_request(client_socket):
     elif raw_path.startswith('/logout') and method == 'GET':
         with open('login.html', 'r') as file:
             login_page = file.read()
-            response_data = 'HTTP/1.1 302 Found\r\nLocation: /login\r\nSet-Cookie: session-id=; Path=/; HttpOnly\r\n\r\n' + login_page
+            response_data = ('HTTP/1.1 302 Found\r\nLocation: /login\r\n'
+                             'Set-Cookie: session-id=; Path=/; HttpOnly\r\n\r\n') + login_page
         client_socket.sendall(response_data.encode('utf-8'))
         # if connection_header and connection_header == 'close':
         client_socket.close()
@@ -760,7 +857,7 @@ def run_server(host, port, num_workers):
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind((host, port))
     server_socket.listen(5)
-    print(f'Server listening on {host}:{port}')
+    print(f'server listening on {host}:{port}')
 
     worker_queue = Queue()
 
@@ -788,9 +885,9 @@ def run_server(host, port, num_workers):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Simple HTTP Server with Authorization')
-    parser.add_argument('-i', '--host', default='localhost', help='Server host')
-    parser.add_argument('-p', '--port', type=int, default=8080, help='Server port')
+    parser = argparse.ArgumentParser(description='Simple HTTP server with Authorization')
+    parser.add_argument('-i', '--host', default='localhost', help='server host')
+    parser.add_argument('-p', '--port', type=int, default=8080, help='server port')
     parser.add_argument('-w', '--workers', type=int, default=4, help='Number of worker threads')
     args = parser.parse_args()
 
