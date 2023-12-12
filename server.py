@@ -466,8 +466,8 @@ def handle_request(client_socket):
             if os.path.exists(encrypt_transmit_file_path):
                 with open(encrypt_transmit_file_path, 'rb') as f:
                     file_content = f.read()
-                    with open('data/encryption/server/Salsa20_key.pem', 'rb') as f:
-                        key = f.read()
+                    with open('data/encryption/server/Salsa20_key.pem', 'rb') as f_Salsa20_key:
+                        key = f_Salsa20_key.read()
                     cipher = Salsa20.new(key=key)
                     cipher_text = cipher.encrypt(file_content)
                     content_length = len(cipher_text)
