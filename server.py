@@ -231,7 +231,7 @@ def list_files_and_directories(path, username):
         return ''
 
 
-def list_files_and_directories_plain(path, username):
+def list_files_and_directories_plain(path):
     files_and_dirs = []
     try:
         for entry in os.listdir(path):
@@ -243,19 +243,21 @@ def list_files_and_directories_plain(path, username):
                 files_and_dirs.append(f'{entry}')
             elif os.path.isdir(entry_path):
                 files_and_dirs.append(f'{entry}')
-                nested_entries = list_files_and_directories_plain(entry_path, username)
+                nested_entries = list_files_and_directories_plain(entry_path)
                 files_and_dirs.append(f'{"".join(nested_entries)}')
-        return ','.join(files_and_dirs)
+        return ', '.join(files_and_dirs)
     except FileNotFoundError:
         return ''
 
 
-def return_index_page(username):
+def return_index_page(username, path=None):
+    if path is None:
+        path = f'/data/{username}'
     with open('index.html', 'r') as file:
         index_page = file.read()
         index_page = index_page.replace('insert_username', f'{username}')
         index_page = index_page.replace('<p class="file">1</p>',
-                                        list_files_and_directories(f'./data/{username}', username))
+                                        list_files_and_directories(f'.{path}', username))
         index_page = index_page.replace('<script></script>', '''<script>
             function toggleFolder(folderId){
                 var x = document.getElementById(\'nested_\' + folderId);
@@ -388,6 +390,8 @@ def handle_request(client_socket):
         print(f'Query parameter path: {upload_path}')
 
     need_to_set_cookie = None
+    username = None
+    password = None
 
     if raw_path == '/favicon.svg':
         with open('favicon.svg', 'rb') as file:
@@ -596,12 +600,12 @@ def handle_request(client_socket):
             else:
                 response_data = 'HTTP/1.1 416 Range Not Satisfiable\r\n\r\n'
     elif test_param and test_param.startswith('1'):  # List the files and directories
-        print(f'Listing files and directories in ./data/{username}')
-        response_data = (f'HTTP/1.1 200 OK{determine_cookie(need_to_set_cookie)}\r\n\r\n' +
-                         list_files_and_directories_plain(f'./data/{username}', username))
+        print(f'Listing files and directories in .{path}')
+        response_data = (f'HTTP/1.1 200 OK{determine_cookie(need_to_set_cookie)}\r\n\r\n[' +
+                         list_files_and_directories_plain(f'.{path}') + ']')
     elif test_param and test_param.startswith('0'):  # Return the index page
         print('Returning index page')
-        index_page = return_index_page(username)
+        index_page = return_index_page(username, path)
         response_data = f'HTTP/1.1 200 OK{determine_cookie(need_to_set_cookie)}\r\n\r\n{index_page}'
     elif raw_path == '/login' and method == 'GET':
         print('cookie_header: ', cookie_header)
@@ -707,7 +711,11 @@ def handle_request(client_socket):
             client_socket.close()
             return
     elif raw_path.startswith('/upload') and method == 'POST':
-        if cookie_header and username_from_cookie:
+        print('POST')
+        print(check_authorization(username, password))
+        print(query_params['path'])
+        print(query_params['path'].split('/')[1] == username)
+        if cookie_header and username_from_cookie or auth_header and auth_header.startswith('Basic ') and check_authorization(username, password) and query_params['path'] and query_params['path'].split('/')[1] == username:
             content_length = None
             for line in request_lines:
                 if 'Content-Length' in line:
@@ -716,10 +724,10 @@ def handle_request(client_socket):
             print(f'Content length: {content_length}')
             request_body = client_socket.recv(content_length).decode('utf-8')
             print(f'Request body: {request_body}')
-            file_name = request_body.split('filename="')[1].split('"')[0]
+            file_name = ','.join(request_lines).split('filename="')[1].split('"')[0]
             print(f'File name: {file_name}')
-            file_content = request_body.split('\r\n\r\n', 1)
-            file_content = file_content[1].split('\r\n------')[0]
+            # file_content = request_body.split('\r\n\r\n', 1)
+            file_content = request_body.split('--')[0]
             print(f'File content: {file_content}')
             tmp = query_params['path']
             # convert file_content to bytes-like object
@@ -730,7 +738,19 @@ def handle_request(client_socket):
             client_socket.sendall(response_data.encode('utf-8'))
             client_socket.close()
             return
+        elif auth_header and auth_header.startswith('Basic ') and check_authorization(username, password) and query_params['path'] and query_params['path'].split('/')[1] != username:
+            # return 403
+            print('403')
+            with open('403.html', 'r') as file:
+                page = file.read()
+                page = page.replace('insert_username', f'{username_from_cookie}')
+                page = page.replace('error_message', 'You are not allowed to upload files to this directory.')
+                response_data = 'HTTP/1.1 403 Forbidden\r\n\r\n' + page
+                client_socket.sendall(response_data.encode('utf-8'))
+                client_socket.close()
+                return
         else:
+            print('302')
             response_data = 'HTTP/1.1 302 Found\r\nLocation: /login\r\n\r\n'
             client_socket.sendall(response_data.encode('utf-8'))
             client_socket.close()
