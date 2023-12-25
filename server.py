@@ -584,13 +584,14 @@ def handle_request(client_socket):
             valid = False
             valid_range = []
             for i in range(len(range1)):
-                start = int(range1[i].split('-')[0])
+                start = int(range1[i].split('-')[0]) if range1[i].split('-')[0] else None
                 print(f'start: {start}')
-                end = int(range1[i].split('-')[1])
+                end = int(range1[i].split('-')[1]) if range1[i].split('-')[1] else None
                 print(f'end: {end}')
-                if (not start or 0 <= start < file_size) and (not end or start <= end < file_size) and (start or end):
+                if ((not start or 0 <= start < file_size) and (not end or 0 <= end < file_size)
+                        and (start or end or start == 0) and (start <= end if start and end else True)):
                     valid = True
-                    if not end:
+                    if end != 0 and not end:
                         end = file_size - 1
                     elif start != 0 and not start:
                         start = file_size - end
@@ -598,24 +599,24 @@ def handle_request(client_socket):
                     valid_range.append((start, end))
 
             if not valid:
-                response_data = 'HTTP/1.1 416 Range Not Satisfiable\r\n\r\n'
-                client_socket.sendall(response_data.encode('utf-8'))
+                response_data = b'HTTP/1.1 416 Range Not Satisfiable\r\n\r\n'
+                client_socket.sendall(response_data)
                 client_socket.close()
                 return
             else:
                 response_data = b'HTTP/1.1 206 Partial Content\r\n'
                 if len(valid_range) == 1:
-                    response_data += f'Content-type= {get_content_type(request_file_path)}\r\n'.encode('utf-8')
+                    content_type = get_content_type(request_file_path)
+                    response_data += f'Content-type= {content_type}\r\n'.encode('utf-8')
+                    print(f'Content type: {content_type}')
                     sub_response_data = b'--THISISMYSELFDIFINEDBOUNDARY\r\n'
                     start = valid_range[0][0]
                     end = valid_range[0][1]
                     with open(request_file_path, 'rb') as file:
                         file.seek(start)
                         content = file.read(end - start + 1)
-                        content_type = get_content_type(request_file_path)
-                        print(f'Content type: {content_type}')
-                        sub_response_data += (f'Content-type= {content_type}\r\n'
-                                              f'Content-range= bytes {start}-{end}/{file_size}\r\n\r\n').encode('utf-8')
+                        sub_response_data += f'Content-range= bytes {start}-{end}/{file_size}\r\n\r\n'.encode('utf-8')
+                        print(f'Content-range= bytes {start}-{end}/{file_size}')
                         sub_response_data += content
                         sub_response_data += b'\r\n'
 
@@ -628,15 +629,16 @@ def handle_request(client_socket):
                 else:
                     response_data += b'Content-type= multipart/byteranges; boundary=THISISMYSELFDIFINEDBOUNDARY\r\n'
                     sub_response_data = b''
+                    content_type = get_content_type(request_file_path)
                     for i in range(len(valid_range)):
                         sub_response_data += b'--THISISMYSELFDIFINEDBOUNDARY\r\n'
                         start = valid_range[i][0]
                         end = valid_range[i][1]
                         with open(request_file_path, 'rb') as file:
                             file.seek(start)
-                            content_type = get_content_type(request_file_path)
                             content = file.read(end - start + 1)
                             print(f'Content type: {content_type}')
+                            print(f'Content-range= bytes {start}-{end}/{file_size}')
                             sub_response_data += (f'Content-type= {content_type}\r\n'
                                                   f'Content-range= bytes {start}-{end}/{file_size}\r\n\r\n').encode(
                                 'utf-8')
