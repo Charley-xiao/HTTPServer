@@ -574,31 +574,60 @@ def handle_request(client_socket):
         if method != 'GET':
             response_data = 'HTTP/1.1 400 Bad Request\r\n\r\nInvalid request method'
         if cookie_header and username_from_cookie or auth_header and auth_header.startswith(
-                'Basic ') and check_authorization(username, password):
+                'Basic '):
+            # and check_authorization(username, password):
+
+            request_file_path = path[1:]
+            file_size = os.path.getsize(request_file_path)
+
             try:
-                range_start, range_end = map(int, range_header[len('bytes='):].split('-'))
+                range1 = range_header.split(',')
+                range_end = [0] * len(range1)
+                range_start = [0] * len(range1)
+                if len(range1) == 1:
+                    if range1[0].split('-')[0].isspace:
+                        range_start = 0
+                    elif range1[0].split('-')[1].isspace:
+                        range_end = file_size - 1
+                    else:
+                        range_start, range_end = map(int, range1[0].split('-'))
+                    if 0 <= range_start < file_size and range_start <= range_end < file_size:
+                        with open(request_file_path, 'rb') as file:
+                            file.seek(range_start)
+                            content = file.read(range_end - range_start + 1)
+                            response_data = (f'HTTP/1.1 206 Partial Content\r\n'
+                                             f'Content-Range: bytes {range_start}-{range_end}/{file_size}\r\n\r\n')
+                            client_socket.sendall(response_data.encode('utf-8') + content)
+                            # if connection_header and connection_header == 'close':
+
+                            return
+                    else:
+                        response_data = 'HTTP/1.1 416 Range Not Satisfiable\r\n\r\n'
+                else:
+                    for i in range(0, len(range1)):
+                        range_start[i], range_end[i] = map(int, range1[i].split('-'))
+                        if 0 <= range_start[i] < file_size and range_start[i] <= range_end[i] < file_size:
+                            with open(request_file_path, 'rb') as file:
+                                file.seek(range_start[i])
+                                content = file.read(range_end[i] - range_start[i] + 1)
+                                response_data = (f'HTTP/1.1 206 Partial Content\r\n'
+                                                 f'Content-Range: bytes {range_start[i]}-{range_end[i]}/{file_size}\r\n\r\n')
+                                client_socket.sendall(response_data.encode('utf-8') + content)
+
+                                # if connection_header and connection_header == 'close':
+                                # client_socket.close()
+                                # return
+
+                        else:
+                            response_data = 'HTTP/1.1 416 Range Not Satisfiable\r\n\r\n'
+                client_socket.close()
+
             except ValueError:
                 response_data = 'HTTP/1.1 400 Bad Request\r\n\r\nInvalid Range header'
                 client_socket.sendall(response_data.encode('utf-8'))
                 # if connection_header and connection_header == 'close':
                 client_socket.close()
                 return
-
-            request_file_path = path[1:]
-            file_size = os.path.getsize(request_file_path)
-
-            if 0 <= range_start < file_size and range_start <= range_end < file_size:
-                with open(request_file_path, 'rb') as file:
-                    file.seek(range_start)
-                    content = file.read(range_end - range_start + 1)
-                    response_data = (f'HTTP/1.1 206 Partial Content\r\n'
-                                     f'Content-Range: bytes {range_start}-{range_end}/{file_size}\r\n\r\n')
-                    client_socket.sendall(response_data.encode('utf-8') + content)
-                    # if connection_header and connection_header == 'close':
-                    client_socket.close()
-                    return
-            else:
-                response_data = 'HTTP/1.1 416 Range Not Satisfiable\r\n\r\n'
     elif test_param and test_param.startswith('1'):  # List the files and directories
         print(f'Listing files and directories in .{path}')
         response_data = (f'HTTP/1.1 200 OK{determine_cookie(need_to_set_cookie)}\r\n\r\n[' +
