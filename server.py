@@ -410,7 +410,7 @@ def handle_request(client_socket):
         username, password = decoded_credentials.split(':')
         print(f'Username: {username}\nPassword: {password}')
 
-        if not check_authorization(username, password):
+        if not check_authorization(username, password) and not range_header:
             response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nInvalid username or password'
             client_socket.sendall(response_data.encode('utf-8'))
             return
@@ -580,54 +580,76 @@ def handle_request(client_socket):
             request_file_path = path[1:]
             file_size = os.path.getsize(request_file_path)
 
-            try:
-                range1 = range_header.split(',')
-                range_end = [0] * len(range1)
-                range_start = [0] * len(range1)
-                if len(range1) == 1:
-                    if range1[0].split('-')[0].isspace:
-                        range_start = 0
-                    elif range1[0].split('-')[1].isspace:
-                        range_end = file_size - 1
-                    else:
-                        range_start, range_end = map(int, range1[0].split('-'))
-                    if 0 <= range_start < file_size and range_start <= range_end < file_size:
-                        with open(request_file_path, 'rb') as file:
-                            file.seek(range_start)
-                            content = file.read(range_end - range_start + 1)
-                            response_data = (f'HTTP/1.1 206 Partial Content\r\n'
-                                             f'Content-Range: bytes {range_start}-{range_end}/{file_size}\r\n\r\n')
-                            client_socket.sendall(response_data.encode('utf-8') + content)
-                            # if connection_header and connection_header == 'close':
+            range1 = range_header.split(',')
+            valid = False
+            valid_range = []
+            for i in range(len(range1)):
+                start = int(range1[i].split('-')[0])
+                print(f'start: {start}')
+                end = int(range1[i].split('-')[1])
+                print(f'end: {end}')
+                if (not start or 0 <= start < file_size) and (not end or start <= end < file_size) and (start or end):
+                    valid = True
+                    if not end:
+                        end = file_size - 1
+                    elif start != 0 and not start:
+                        start = file_size - end
+                        end = file_size - 1
+                    valid_range.append((start, end))
 
-                            return
-                    else:
-                        response_data = 'HTTP/1.1 416 Range Not Satisfiable\r\n\r\n'
-                else:
-                    for i in range(0, len(range1)):
-                        range_start[i], range_end[i] = map(int, range1[i].split('-'))
-                        if 0 <= range_start[i] < file_size and range_start[i] <= range_end[i] < file_size:
-                            with open(request_file_path, 'rb') as file:
-                                file.seek(range_start[i])
-                                content = file.read(range_end[i] - range_start[i] + 1)
-                                response_data = (f'HTTP/1.1 206 Partial Content\r\n'
-                                                 f'Content-Range: bytes {range_start[i]}-{range_end[i]}/{file_size}\r\n\r\n')
-                                client_socket.sendall(response_data.encode('utf-8') + content)
-
-                                # if connection_header and connection_header == 'close':
-                                # client_socket.close()
-                                # return
-
-                        else:
-                            response_data = 'HTTP/1.1 416 Range Not Satisfiable\r\n\r\n'
-                client_socket.close()
-
-            except ValueError:
-                response_data = 'HTTP/1.1 400 Bad Request\r\n\r\nInvalid Range header'
+            if not valid:
+                response_data = 'HTTP/1.1 416 Range Not Satisfiable\r\n\r\n'
                 client_socket.sendall(response_data.encode('utf-8'))
-                # if connection_header and connection_header == 'close':
                 client_socket.close()
                 return
+            else:
+                response_data = b'HTTP/1.1 206 Partial Content\r\n'
+                if len(valid_range) == 1:
+                    response_data += f'Content-type= {get_content_type(request_file_path)}\r\n'.encode('utf-8')
+                    sub_response_data = b'--THISISMYSELFDIFINEDBOUNDARY\r\n'
+                    start = valid_range[0][0]
+                    end = valid_range[0][1]
+                    with open(request_file_path, 'rb') as file:
+                        file.seek(start)
+                        content = file.read(end - start + 1)
+                        content_type = get_content_type(request_file_path)
+                        print(f'Content type: {content_type}')
+                        sub_response_data += (f'Content-type= {content_type}\r\n'
+                                              f'Content-range= bytes {start}-{end}/{file_size}\r\n\r\n').encode('utf-8')
+                        sub_response_data += content
+                        sub_response_data += b'\r\n'
+
+                    content_length = len(sub_response_data)
+                    response_data += f'Content-Length: {content_length}\r\n\r\n'.encode('utf-8')
+                    response_data += sub_response_data
+                    client_socket.sendall(response_data)
+                    client_socket.close()
+                    return
+                else:
+                    response_data += b'Content-type= multipart/byteranges; boundary=THISISMYSELFDIFINEDBOUNDARY\r\n'
+                    sub_response_data = b''
+                    for i in range(len(valid_range)):
+                        sub_response_data += b'--THISISMYSELFDIFINEDBOUNDARY\r\n'
+                        start = valid_range[i][0]
+                        end = valid_range[i][1]
+                        with open(request_file_path, 'rb') as file:
+                            file.seek(start)
+                            content_type = get_content_type(request_file_path)
+                            content = file.read(end - start + 1)
+                            print(f'Content type: {content_type}')
+                            sub_response_data += (f'Content-type= {content_type}\r\n'
+                                                  f'Content-range= bytes {start}-{end}/{file_size}\r\n\r\n').encode(
+                                'utf-8')
+                            sub_response_data += content
+                            sub_response_data += b'\r\n'
+
+                    content_length = len(sub_response_data)
+                    response_data += f'Content-Length: {content_length}\r\n\r\n'.encode('utf-8')
+                    response_data += sub_response_data
+                    client_socket.sendall(response_data)
+                    client_socket.close()
+                    return
+
     elif test_param and test_param.startswith('1'):  # List the files and directories
         print(f'Listing files and directories in .{path}')
         response_data = (f'HTTP/1.1 200 OK{determine_cookie(need_to_set_cookie)}\r\n\r\n[' +
@@ -744,7 +766,9 @@ def handle_request(client_socket):
         print(check_authorization(username, password))
         print(query_params['path'])
         print(query_params['path'].split('/')[1] == username)
-        if cookie_header and username_from_cookie or auth_header and auth_header.startswith('Basic ') and check_authorization(username, password) and query_params['path'] and query_params['path'].split('/')[1] == username:
+        if cookie_header and username_from_cookie or auth_header and auth_header.startswith(
+                'Basic ') and check_authorization(username, password) and query_params['path'] and \
+                query_params['path'].split('/')[1] == username:
             content_length = None
             for line in request_lines:
                 if 'Content-Length' in line:
@@ -767,7 +791,8 @@ def handle_request(client_socket):
             client_socket.sendall(response_data.encode('utf-8'))
             client_socket.close()
             return
-        elif auth_header and auth_header.startswith('Basic ') and check_authorization(username, password) and query_params['path'] and query_params['path'].split('/')[1] != username:
+        elif auth_header and auth_header.startswith('Basic ') and check_authorization(username, password) and \
+                query_params['path'] and query_params['path'].split('/')[1] != username:
             # return 403
             print('403')
             with open('403.html', 'r') as file:
