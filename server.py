@@ -104,7 +104,7 @@ def handle_file_request(client_socket, path, auth_header):
     if os.path.exists(file_path):
         if os.path.isfile(file_path):
             # Check if the file is a text file for preview
-            text_file_extensions = ['.txt', '.html', '.css', '.js', '.py']
+            text_file_extensions = ['.txt', '.html', '.css', '.js', '.py', '.cpp', '.c', '.java', '.json', '.xml']
             _, file_extension = os.path.splitext(file_path)
             is_text_file = file_extension.lower() in text_file_extensions
             print(f'is_text_file for {file_path}: ', is_text_file)
