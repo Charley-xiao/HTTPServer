@@ -888,8 +888,9 @@ def handle_request(client_socket):
         # first check if authorized
         if cookie_header and username_from_cookie or auth_header and auth_header.startswith(
                 'Basic ') and check_authorization(username, password):
-            # TODO: check if the users match, otherwise return 403
-            if raw_path == '/':
+            if method == 'POST':
+                response_data = 'HTTP/1.1 405 Method Not Allowed\r\n\r\n'
+            elif raw_path == '/':
                 print('Returning index page')
                 index_page = return_index_page(username_from_cookie)
                 print('Returned')
@@ -903,7 +904,9 @@ def handle_request(client_socket):
         else:
             response_data = 'HTTP/1.1 401 Unauthorized\r\n\r\nWWW-Authenticate: Basic realm="Authorization required"'
     elif cookie_header and username_from_cookie:
-        if raw_path == '/':
+        if method == 'POST':
+                response_data = 'HTTP/1.1 405 Method Not Allowed\r\n\r\n'
+        elif raw_path == '/':
             print('Returning index page')
             index_page = return_index_page(username_from_cookie)
             response_data = 'HTTP/1.1 200 OK\r\n\r\n' + index_page
