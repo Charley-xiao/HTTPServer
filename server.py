@@ -242,9 +242,9 @@ def list_files_and_directories_plain(path):
             if os.path.isfile(entry_path):
                 files_and_dirs.append(f'{entry}')
             elif os.path.isdir(entry_path):
-                files_and_dirs.append(f'{entry}')
-                nested_entries = list_files_and_directories_plain(entry_path)
-                files_and_dirs.append(f'{"".join(nested_entries)}')
+                files_and_dirs.append(f'{entry}/')
+                # nested_entries = list_files_and_directories_plain(entry_path)
+                # files_and_dirs.append(f'{"".join(nested_entries)}')
         return ', '.join(files_and_dirs)
     except FileNotFoundError:
         return ''
