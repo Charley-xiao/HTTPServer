@@ -46,7 +46,7 @@ def generate_session_id(username):
     return session_id
 
 
-def set_cookie_header(username, expiration_days=7):
+def set_cookie_header(username, expiration_days=0.0003):
     session_id = generate_session_id(username)
     print(f'Session ID generated from {username}: {session_id}')
     expiration_date = datetime.datetime.now() + datetime.timedelta(days=expiration_days)
@@ -779,7 +779,11 @@ def handle_request(client_socket):
             print(f'Content length: {content_length}')
             request_body = client_socket.recv(content_length).decode('utf-8')
             print(f'Request body: {request_body}')
-            file_name = ','.join(request_lines).split('filename="')[1].split('"')[0]
+            file_name = None
+            try:
+                file_name = request_body.split('filename="')[1].split('"')[0]
+            except Exception as e:
+                file_name = ','.join(request_lines).split('filename="')[1].split('"')[0]
             print(f'File name: {file_name}')
             # file_content = request_body.split('\r\n\r\n', 1)
             file_content = request_body.split('--')[0]

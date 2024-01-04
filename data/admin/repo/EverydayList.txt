@@ -1,3 +1,7 @@
+-45366766318046757532828412324
+Content-Disposition: form-data; name="file"; filename="EverydayList.txt"
+Content-Type: text/plain
+
 A. English: 1h+: 22:00~23:00, Thur. 10:00~12:00
 - A.1. GRE
 - - A.1.1. Vocabulary
@@ -19,3 +23,4 @@ D. Research: 1h: Thur. 16:00~17:00
 
 E. Spanish: 0.5h: Thur. 17:00~17:30
 - E.1. Español Moderno 3
+
