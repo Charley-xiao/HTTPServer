@@ -480,7 +480,7 @@ def handle_request(client_socket):
 
                     response_data = (f'HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\n'
                                      f'Content-Length: {content_length}\r\n\r\n')
-                    client_socket.sendall(response_data.encode('utf-8') + file_content)
+                    client_socket.sendall(response_data.encode('utf-8') + cipher_text)
                     print(f'Response data: {response_data}')
                     print('Successfully encrypted and transmitted file')
                     client_socket.close()
@@ -890,7 +890,17 @@ def handle_request(client_socket):
                 response_data = 'HTTP/1.1 404 Not Found\r\n\r\nFile not found'
     elif path.startswith('/data'):
         # first check if authorized
-        if cookie_header and username_from_cookie or auth_header and auth_header.startswith(
+        if cookie_header and username_from_cookie and not path.startswith(f'/data/{username_from_cookie}'):
+            print('403')
+            with open('403.html', 'r') as file:
+                page = file.read()
+                page = page.replace('insert_username', f'{username_from_cookie}')
+                page = page.replace('error_message', 'You are not allowed to view this file.')
+                response_data = 'HTTP/1.1 403 Forbidden\r\n\r\n' + page
+                client_socket.sendall(response_data.encode('utf-8'))
+                client_socket.close()
+                return
+        elif cookie_header and username_from_cookie or auth_header and auth_header.startswith(
                 'Basic ') and check_authorization(username, password):
             if method == 'POST':
                 response_data = 'HTTP/1.1 405 Method Not Allowed\r\n\r\n'
